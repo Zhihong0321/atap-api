@@ -13,6 +13,21 @@ type HeadlineResult = {
   published_at?: string;
 };
 
+// Perplexity Wrapper response types
+interface PerplexityResponse {
+  status: string;
+  data: {
+    answer: string;
+    text: string; // Sometimes mapped from answer
+    sources?: Array<{
+      name: string;
+      url: string;
+    }>;
+    backend_uuid?: string;
+    frontend_uuid?: string;
+  };
+}
+
 export async function createNewsTask(input: CreateTaskInput) {
   return prisma.newsTask.create({
     data: {
@@ -25,20 +40,63 @@ export async function createNewsTask(input: CreateTaskInput) {
 }
 
 export async function fetchHeadlinesFromNewsSearcher(taskId: string, query: string): Promise<HeadlineResult[]> {
-  // TODO: integrate with NewsSearcher (Perplexity wrapper) using task metadata.
-  // Placeholder: return a small static set so pipeline can be wired end-to-end without external calls.
-  return [
-    {
-      title: `${query} — sample headline A`,
-      source: 'placeholder',
-      url: 'https://example.com/a'
-    },
-    {
-      title: `${query} — sample headline B`,
-      source: 'placeholder',
-      url: 'https://example.com/b'
+  const PERPLEXITY_API_URL = 'https://ee-perplexity-wrapper-production.up.railway.app/api/query_sync';
+  const accountName = 'default'; // Or retrieve from task/env if needed
+
+  const url = new URL(PERPLEXITY_API_URL);
+  url.searchParams.append('q', `Find news headlines for: ${query}. Return ONLY a JSON array of objects with "title", "url", "source", and "date" (YYYY-MM-DD format). Do not include any other text.`);
+  url.searchParams.append('account_name', accountName);
+  url.searchParams.append('mode', 'research');
+  url.searchParams.append('sources', 'web');
+
+  try {
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Perplexity API error: ${response.status} ${text}`);
     }
-  ];
+
+    const data = await response.json() as PerplexityResponse;
+    const answerText = data.data?.answer || '';
+
+    // Attempt to parse JSON from the answer text
+    // The LLM might wrap it in markdown code blocks ```json ... ```
+    const jsonMatch = answerText.match(/```json\s*([\s\S]*?)\s*```/) || answerText.match(/```\s*([\s\S]*?)\s*```/);
+    const jsonString = jsonMatch ? jsonMatch[1] : answerText;
+
+    let parsed: any[] = [];
+    try {
+      parsed = JSON.parse(jsonString);
+    } catch (e) {
+      console.error('Failed to parse JSON from Perplexity response:', answerText);
+      // Fallback: empty list or try to extract lines?
+      // For now, empty list to avoid garbage data
+      return []; 
+    }
+
+    if (!Array.isArray(parsed)) {
+      console.warn('Perplexity response is not an array:', parsed);
+      return [];
+    }
+
+    // Map to HeadlineResult
+    return parsed.map((item: any) => ({
+      title: item.title || 'Untitled',
+      source: item.source || 'Unknown',
+      url: item.url || '',
+      published_at: item.date || new Date().toISOString()
+    }));
+
+  } catch (error) {
+    console.error('Error fetching from Perplexity Wrapper:', error);
+    throw error;
+  }
 }
 
 async function ensureNewsForLead(leadId: string, headline: HeadlineResult) {
