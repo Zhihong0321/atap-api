@@ -7,6 +7,7 @@ import swaggerUi from '@fastify/swagger-ui';
 import { apiConfig } from './config.js';
 import { registerNewsRoutes } from './routes/news.js';
 import { registerNewsTaskRoutes } from './routes/newsTasks.js';
+import { registerNewsLeadRoutes } from './routes/newsLeads.js';
 import { prisma } from './prisma.js';
 
 async function buildServer() {
@@ -110,6 +111,7 @@ async function buildServer() {
   // Register routes under /api/v1
   await app.register(registerNewsRoutes as any, { prefix: '/api/v1' });
   await app.register(registerNewsTaskRoutes as any, { prefix: '/api/v1' });
+  await app.register(registerNewsLeadRoutes as any, { prefix: '/api/v1' });
 
   app.addHook('onClose', async () => {
     await prisma.$disconnect();
