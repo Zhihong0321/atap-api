@@ -53,6 +53,51 @@ async function buildServer() {
         <h2>Authentication</h2>
         <p>All Admin endpoints require the <code>Authorization</code> header (Bearer Token).</p>
 
+        <hr>
+
+        <h2>Workflow Guide for Frontend Team</h2>
+        <p>This system operates in a 4-step pipeline. The Admin Dashboard should reflect these stages:</p>
+
+        <h3>Step 1: Discovery (Task Manager)</h3>
+        <p><strong>Goal:</strong> Find latest news headlines.</p>
+        <ol>
+            <li>Admin creates a task (e.g., Query: "Malaysia Solar 2025").</li>
+            <li>Admin clicks <strong>"Run Discovery"</strong> (<code>POST /news-tasks/:id/run</code>).</li>
+            <li><strong>System Action:</strong> Fetches headlines, creates <code>NewsLead</code> items, and creates placeholder <code>News</code> entries (Status: <em>Pending Rewrite</em>).</li>
+        </ol>
+
+        <h3>Step 2: Content Generation (Rewriter)</h3>
+        <p><strong>Goal:</strong> Turn headlines into full articles with images.</p>
+        <ol>
+            <li>Admin checks the <strong>"Rewrite Queue"</strong> (Dashboard shows pending count).</li>
+            <li>Admin clicks <strong>"Process Batch"</strong> (<code>POST /news-leads/process-rewrites</code>).</li>
+            <li><strong>System Action:</strong> 
+                <ul>
+                    <li>Picks 10 pending leads.</li>
+                    <li>Calls AI Rewriter (Rate Limited: 4s interval).</li>
+                    <li>Updates <code>News</code> with full content (EN/CN/MY), cover image, and sources.</li>
+                    <li>Marks lead as <em>Rewritten</em>.</li>
+                </ul>
+            </li>
+        </ol>
+
+        <h3>Step 3: Editorial Review (CMS)</h3>
+        <p><strong>Goal:</strong> Final polish before publishing.</p>
+        <ol>
+            <li>Admin goes to <strong>"News Management"</strong>.</li>
+            <li>Filters by <code>content_status=filled</code> to see generated articles.</li>
+            <li>Admin reviews/edits content (<code>PUT /news/:id</code>).</li>
+        </ol>
+
+        <h3>Step 4: Publish</h3>
+        <p><strong>Goal:</strong> Make it live on the portal.</p>
+        <ol>
+            <li>Admin toggles <strong>"Publish"</strong> (<code>PATCH /news/:id/publish</code>).</li>
+            <li>News becomes visible on the public endpoint (<code>GET /news?published=true</code>).</li>
+        </ol>
+
+        <hr>
+
         <h2>1. News Task Manager (Admin)</h2>
         
         <h3>List All Query Tasks</h3>
@@ -75,8 +120,12 @@ async function buildServer() {
         <h3>Delete Task</h3>
         <pre><code>DELETE /news-tasks/:id</code></pre>
 
-        <h3>Manual Trigger (Run Task)</h3>
+        <h3>Manual Trigger (Discovery)</h3>
         <pre><code>POST /news-tasks/:id/run</code></pre>
+
+        <h3>Trigger Content Rewriter (Batch)</h3>
+        <pre><code>POST /news-leads/process-rewrites</code></pre>
+        <p>Processes up to 10 pending leads per call. Call repeatedly until queue is empty.</p>
 
         <h2>2. News Management</h2>
 
