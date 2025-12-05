@@ -31,6 +31,7 @@ model News {
   content_cn  String
   content_my  String
   news_date   DateTime @db.Timestamptz(6)
+  image_url   String?
   sources     Json?
   is_published Boolean  @default(false)
   is_highlight Boolean  @default(false)
