@@ -28,26 +28,34 @@ interface PerplexityResponse {
   };
 }
 
+
+const NEW_SEARCHER_COLLECTION_UUID = 'e837cb67-4c52-4d0f-be7e-b44c7acae98a';
+
 export async function createNewsTask(input: CreateTaskInput) {
   return prisma.newsTask.create({
     data: {
       query: input.query,
       account_name: input.account_name ?? null,
-      collection_uuid: input.collection_uuid ?? null,
+      collection_uuid: input.collection_uuid ?? NEW_SEARCHER_COLLECTION_UUID,
       status: 'pending'
     }
   });
 }
 
-export async function fetchHeadlinesFromNewsSearcher(taskId: string, query: string): Promise<HeadlineResult[]> {
+export async function fetchHeadlinesFromNewsSearcher(taskId: string, query: string, collectionUuid?: string | null): Promise<HeadlineResult[]> {
   const PERPLEXITY_API_URL = 'https://ee-perplexity-wrapper-production.up.railway.app/api/query_sync';
-  const accountName = 'default'; // Or retrieve from task/env if needed
+  const accountName = 'zhihong0321@gmail'; // Updated to use valid account
 
   const url = new URL(PERPLEXITY_API_URL);
   url.searchParams.append('q', `Find news headlines for: ${query}. Return ONLY a JSON array of objects with "title", "url", "source", and "date" (YYYY-MM-DD format). Do not include any other text.`);
   url.searchParams.append('account_name', accountName);
-  url.searchParams.append('mode', 'research');
+  url.searchParams.append('mode', 'auto'); // Changed from research to auto to fix 500 error
   url.searchParams.append('sources', 'web');
+  url.searchParams.append('answer_only', 'true');
+
+  if (collectionUuid) {
+    url.searchParams.append('collection_uuid', collectionUuid);
+  }
 
   try {
     const response = await fetch(url.toString(), {
@@ -62,8 +70,9 @@ export async function fetchHeadlinesFromNewsSearcher(taskId: string, query: stri
       throw new Error(`Perplexity API error: ${response.status} ${text}`);
     }
 
-    const data = await response.json() as PerplexityResponse;
-    const answerText = data.data?.answer || '';
+    const data = await response.json() as any;
+    const answerText = data.answer || data.data?.answer || '';
+
 
     // Attempt to parse JSON from the answer text
     // The LLM might wrap it in markdown code blocks ```json ... ```
@@ -144,7 +153,7 @@ export async function runNewsTask(taskId: string) {
   await prisma.newsTask.update({ where: { id: taskId }, data: { status: 'running', error: null } });
 
   try {
-    const headlines = await fetchHeadlinesFromNewsSearcher(taskId, task.query);
+    const headlines = await fetchHeadlinesFromNewsSearcher(taskId, task.query, task.collection_uuid);
 
     // Clean up old data: find existing leads, identify their news items, and delete everything
     const existingLeads = await prisma.newsLead.findMany({
