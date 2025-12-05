@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum NewsTaskStatus {
+  pending
+  running
+  completed
+  failed
+}
+
+enum NewsLeadStatus {
+  pending
+  rewrite_pending
+  rewritten
+  error
+}
+
+model News {
+  id          String   @id @default(uuid())
+  title_en    String
+  title_cn    String
+  title_my    String
+  content_en  String
+  content_cn  String
+  content_my  String
+  news_date   DateTime @db.Timestamptz(6)
+  sources     Json?
+  is_published Boolean  @default(false)
+  is_highlight Boolean  @default(false)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @updatedAt @db.Timestamptz(6)
+
+  news_lead   NewsLead?
+}
+
+model NewsTask {
+  id              String         @id @default(uuid())
+  query           String
+  account_name    String?
+  collection_uuid String?
+  status          NewsTaskStatus @default(pending)
+  error           String?
+  created_at      DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime       @updatedAt @db.Timestamptz(6)
+
+  leads NewsLead[]
+}
+
+model NewsLead {
+  id            String         @id @default(uuid())
+  task_id       String
+  task          NewsTask       @relation(fields: [task_id], references: [id])
+  headline      String
+  source        Json?
+  published_at  DateTime?      @db.Timestamptz(6)
+  status        NewsLeadStatus @default(pending)
+  news_id       String?        @unique
+  news          News?          @relation(fields: [news_id], references: [id])
+  created_at    DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime       @updatedAt @db.Timestamptz(6)
+
+  @@unique([task_id, headline])
+}
