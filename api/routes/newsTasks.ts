@@ -10,10 +10,31 @@ const createTaskSchema = z.object({
   collection_uuid: z.string().trim().optional()
 });
 
+const updateTaskSchema = z.object({
+  query: z.string().trim().min(3).optional(),
+  account_name: z.string().trim().optional(),
+  collection_uuid: z.string().trim().optional()
+});
+
 export async function registerNewsTaskRoutes(
   fastify: FastifyInstance,
   opts: FastifyRegisterOptions<never>
 ) {
+  // List Tasks
+  fastify.get('/news-tasks', { preHandler: requireAdmin }, async (request, reply) => {
+    const tasks = await prisma.newsTask.findMany({ orderBy: { created_at: 'desc' } });
+    return { data: tasks };
+  });
+
+  // Get Single Task
+  fastify.get('/news-tasks/:id', { preHandler: requireAdmin }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const task = await prisma.newsTask.findUnique({ where: { id } });
+    if (!task) return reply.callNotFound();
+    return task;
+  });
+
+  // Create Task
   fastify.post('/news-tasks', { preHandler: requireAdmin }, async (request, reply) => {
     const parsed = createTaskSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -22,6 +43,38 @@ export async function registerNewsTaskRoutes(
 
     const task = await createNewsTask(parsed.data);
     return reply.code(201).send(task);
+  });
+
+  // Update Task
+  fastify.put('/news-tasks/:id', { preHandler: requireAdmin }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = updateTaskSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send(parsed.error.flatten());
+    }
+
+    try {
+        const task = await prisma.newsTask.update({
+            where: { id },
+            data: parsed.data
+        });
+        return task;
+    } catch (e) {
+        return reply.callNotFound();
+    }
+  });
+
+  // Delete Task
+  fastify.delete('/news-tasks/:id', { preHandler: requireAdmin }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+        // Delete related leads first if cascade not set (safe side)
+        await prisma.newsLead.deleteMany({ where: { task_id: id } });
+        await prisma.newsTask.delete({ where: { id } });
+        return reply.code(204).send();
+    } catch (e) {
+        return reply.callNotFound();
+    }
   });
 
   fastify.post('/news-tasks/:id/run', { preHandler: requireAdmin }, async (request, reply) => {

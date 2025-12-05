@@ -15,7 +15,8 @@ const listQuerySchema = z.object({
     .optional()
     .transform((val) => (val === undefined ? undefined : val === 'true')),
   limit: z.coerce.number().int().min(1).max(100).default(20),
-  offset: z.coerce.number().int().min(0).default(0)
+  offset: z.coerce.number().int().min(0).default(0),
+  content_status: z.enum(['empty', 'filled']).optional()
 });
 
 function serialize(news: News) {
@@ -34,11 +35,19 @@ export async function registerNewsRoutes(
     if (!parsed.success) {
       return reply.code(400).send(parsed.error.flatten());
     }
-    const { published, highlight, limit, offset } = parsed.data;
+    const { published, highlight, limit, offset, content_status } = parsed.data;
 
     const where: Record<string, unknown> = {};
     if (published !== undefined) where.is_published = published;
     if (highlight !== undefined) where.is_highlight = highlight;
+    
+    if (content_status === 'empty') {
+       // Assuming 'empty' means content_en is just the placeholder from ensureNewsForLead
+       // "Pending rewrite for: <Title>"
+       where.content_en = { startsWith: 'Pending rewrite for:' };
+    } else if (content_status === 'filled') {
+       where.content_en = { not: { startsWith: 'Pending rewrite for:' } };
+    }
 
     const data = await prisma.news.findMany({
       where,
