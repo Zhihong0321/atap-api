@@ -34,8 +34,8 @@ async function buildServer() {
   app.get('/api/v1/health', async () => ({ status: 'ok' }));
 
   // Register routes under /api/v1
-  await app.register(registerNewsRoutes, { prefix: '/api/v1' });
-  await app.register(registerNewsTaskRoutes, { prefix: '/api/v1' });
+  await app.register(registerNewsRoutes as any, { prefix: '/api/v1' });
+  await app.register(registerNewsTaskRoutes as any, { prefix: '/api/v1' });
 
   app.addHook('onClose', async () => {
     await prisma.$disconnect();
