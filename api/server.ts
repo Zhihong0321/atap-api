@@ -31,7 +31,7 @@ async function buildServer() {
   });
 
   // API Documentation Page (Markdown Render)
-  app.get('/docs/guide', async (request, reply) => {
+  app.get('/api-guide', async (request, reply) => {
     const html = `
       <!DOCTYPE html>
       <html lang="en">
