@@ -88,8 +88,21 @@ export async function runNewsTask(taskId: string) {
   try {
     const headlines = await fetchHeadlinesFromNewsSearcher(taskId, task.query);
 
-    // Replace prior leads for idempotency
-    await prisma.newsLead.deleteMany({ where: { task_id: taskId } });
+    // Clean up old data: find existing leads, identify their news items, and delete everything
+    const existingLeads = await prisma.newsLead.findMany({
+      where: { task_id: taskId },
+      select: { news_id: true }
+    });
+
+    const newsIdsToDelete = existingLeads
+      .map((l) => l.news_id)
+      .filter((id): id is string => id !== null);
+
+    // Transactional cleanup to ensure consistency
+    await prisma.$transaction([
+      prisma.newsLead.deleteMany({ where: { task_id: taskId } }),
+      prisma.news.deleteMany({ where: { id: { in: newsIdsToDelete } } })
+    ]);
 
     const leads = await prisma.$transaction(
       headlines.map((h) =>
