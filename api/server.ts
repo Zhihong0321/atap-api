@@ -30,6 +30,80 @@ async function buildServer() {
     routePrefix: '/docs'
   });
 
+  // API Documentation Page (Markdown Render)
+  app.get('/docs/guide', async (request, reply) => {
+    const html = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>API Documentation Guide</title>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5.5.0/github-markdown.min.css">
+        <style>
+            body { box-sizing: border-box; min-width: 200px; max-width: 980px; margin: 0 auto; padding: 45px; }
+            @media (max-width: 767px) { body { padding: 15px; } }
+        </style>
+      </head>
+      <body class="markdown-body">
+        <h1>Admin Dashboard & News API Documentation</h1>
+        <p><strong>Base URL</strong>: <code>https://api-atap-solar-production.up.railway.app/api/v1</code></p>
+        
+        <h2>Authentication</h2>
+        <p>All Admin endpoints require the <code>Authorization</code> header (Bearer Token).</p>
+
+        <h2>1. News Task Manager (Admin)</h2>
+        
+        <h3>List All Query Tasks</h3>
+        <pre><code>GET /news-tasks</code></pre>
+        
+        <h3>Create Query Task</h3>
+        <pre><code>POST /news-tasks
+{
+  "query": "Solar Policy 2025",
+  "account_name": "optional",
+  "collection_uuid": "optional"
+}</code></pre>
+
+        <h3>Update Query Task</h3>
+        <pre><code>PUT /news-tasks/:id
+{
+  "query": "Updated Query"
+}</code></pre>
+
+        <h3>Delete Task</h3>
+        <pre><code>DELETE /news-tasks/:id</code></pre>
+
+        <h3>Manual Trigger (Run Task)</h3>
+        <pre><code>POST /news-tasks/:id/run</code></pre>
+
+        <h2>2. News Management</h2>
+
+        <h3>List News (Public / Admin Filter)</h3>
+        <pre><code>GET /news?limit=20&offset=0&published=true&content_status=empty</code></pre>
+        <ul>
+            <li><code>content_status=empty</code>: Headlines only (Pending rewrite)</li>
+            <li><code>content_status=filled</code>: Full content available</li>
+        </ul>
+
+        <h3>Update News (Admin)</h3>
+        <pre><code>PUT /news/:id
+{
+  "title_en": "...",
+  "content_en": "..."
+}</code></pre>
+
+        <h3>Publish/Highlight</h3>
+        <pre><code>PATCH /news/:id/publish
+{
+  "is_published": true
+}</code></pre>
+      </body>
+      </html>
+    `;
+    reply.type('text/html').send(html);
+  });
+
   // Health under v1 prefix
   app.get('/api/v1/health', async () => ({ status: 'ok' }));
 
