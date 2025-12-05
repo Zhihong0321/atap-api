@@ -9,7 +9,7 @@ COPY prisma ./prisma
 RUN npx prisma generate
 
 COPY . .
-RUN npm run api:build
+RUN npm run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
