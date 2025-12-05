@@ -22,4 +22,4 @@ COPY --from=builder /app/dist-api ./dist-api
 COPY --from=builder /app/prisma ./prisma
 
 EXPOSE 4000
-CMD ["node", "dist-api/server.js"]
+CMD ["node", "dist-api/api/server.js"]
