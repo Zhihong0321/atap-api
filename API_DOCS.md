@@ -38,9 +38,12 @@ All Admin endpoints require the `Authorization` header (Bearer Token).
   {
     "query": "Solar Policy 2025",
     "account_name": "optional-account",
-    "collection_uuid": "optional-uuid"
+    "collection_uuid": "optional-uuid",
+    "category_id": "uuid-of-existing-category"
   }
   ```
+- **Required Fields**: `query`
+- **Optional Fields**: `account_name`, `collection_uuid`, `category_id` (to categorize all news generated from this task)
 
 ### Update Query Task
 **PUT** `/news-tasks/:id`
@@ -150,5 +153,106 @@ All Admin endpoints require the `Authorization` header (Bearer Token).
   {
     "news": { /* updated news object */ },
     "rewrite": { /* raw rewriter response (meta, article, tags, source_urls) */ }
+  }
+  ```
+
+---
+
+## 3. Categories (Admin)
+
+### List Categories
+**GET** `/categories`
+- **Description**: Returns all categories with their associated tags.
+- **Response**:
+  ```json
+  [
+    {
+      "id": "uuid",
+      "name_en": "Solar Policy",
+      "name_cn": "太阳能政策",
+      "name_my": "Dasar Tenaga Solar",
+      "description_en": "News about solar energy policies and regulations",
+      "description_cn": "关于太阳能政策和法规的新闻",
+      "description_my": "Berita tentang dasar dan peraturan tenaga solar",
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z",
+      "tags": [
+        {
+          "id": "uuid",
+          "name": "policy",
+          "category_id": "uuid"
+        }
+      ]
+    }
+  ]
+  ```
+
+### Create Category
+**POST** `/categories`
+- **Body**:
+  ```json
+  {
+    "name_en": "Solar Policy",
+    "name_cn": "太阳能政策",
+    "name_my": "Dasar Tenaga Solar",
+    "description_en": "News about solar energy policies and regulations",
+    "description_cn": "关于太阳能政策和法规的新闻",
+    "description_my": "Berita tentang dasar dan peraturan tenaga solar"
+  }
+  ```
+- **Required Fields**: `name_en`, `name_cn`, `name_my`
+- **Optional Fields**: `description_en`, `description_cn`, `description_my`
+- **Response**: Created category object
+
+### Update Category
+**PUT** `/categories/:id`
+- **Body** (all fields optional):
+  ```json
+  {
+    "name_en": "Updated Solar Policy",
+    "name_cn": "更新的太阳能政策",
+    "name_my": "Dasar Tenaga Solar Dikemas Kini",
+    "description_en": "Updated description...",
+    "description_cn": "更新的描述...",
+    "description_my": "Deskripsi dikemas kini..."
+  }
+  ```
+- **Response**: Updated category object
+
+### Delete Category
+**DELETE** `/categories/:id`
+- **Description**: Deletes a category. Will also delete all associated tags and news items.
+- **Response**:
+  ```json
+  {
+    "success": true
+  }
+  ```
+
+### Create Tag under Category
+**POST** `/categories/:id/tags`
+- **Body**:
+  ```json
+  {
+    "name": "policy"
+  }
+  ```
+- **Description**: Creates a new tag under the specified category.
+- **Response**:
+  ```json
+  {
+    "id": "uuid",
+    "name": "policy",
+    "category_id": "uuid"
+  }
+  ```
+
+### Delete Tag
+**DELETE** `/tags/:id`
+- **Description**: Deletes a specific tag.
+- **Response**:
+  ```json
+  {
+    "success": true
   }
   ```
