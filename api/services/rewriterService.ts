@@ -203,3 +203,52 @@ export async function processRewriteQueue() {
 
   return { processed: results.length, details: results };
 }
+
+export async function rewriteNews(newsId: string) {
+  const news = await prisma.news.findUnique({
+    where: { id: newsId },
+    include: {
+      category: { include: { tags: true } }
+    }
+  });
+
+  if (!news) {
+    throw new Error('News not found');
+  }
+
+  const availableTags = news.category?.tags ?? [];
+
+  const prompt = buildRewritePrompt(
+    news.title_en || news.title_cn || news.title_my,
+    availableTags.map((t) => t.name)
+  );
+
+  const result = await REWRITER_RATE_LIMITER.add(() => callRewriterApi(prompt));
+
+  const connectTags: { id: string }[] = [];
+  if (result.tags && Array.isArray(result.tags)) {
+    result.tags.forEach((tagName) => {
+      const found = availableTags.find((t) => t.name.toLowerCase() === tagName.toLowerCase());
+      if (found) connectTags.push({ id: found.id });
+    });
+  }
+
+  const content_en = result.article?.en_html ?? formatContent(result.data?.en);
+  const content_cn = result.article?.zh_cn_html ?? formatContent(result.data?.zh_cn);
+  const content_my = result.article?.ms_my_html ?? formatContent(result.data?.ms_my);
+  const sourcesArray = Array.isArray(result.source_urls) ? result.source_urls : [];
+
+  const updatedNews = await prisma.news.update({
+    where: { id: newsId },
+    data: {
+      content_en,
+      content_cn,
+      content_my,
+      image_url: result.meta?.image_url || null,
+      sources: sourcesArray as any,
+      tags: { connect: connectTags }
+    }
+  });
+
+  return { updatedNews, rewrite: result };
+}

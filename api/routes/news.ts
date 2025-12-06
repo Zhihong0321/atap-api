@@ -5,6 +5,7 @@ import { prisma } from '../prisma.js';
 import { requireAdmin } from '../auth.js';
 import { createNewsSchema, publishSchema, updateNewsSchema } from '../schemas/news.js';
 import { saveNewsImageFromBuffer } from '../utils/storage.js';
+import { rewriteNews } from '../services/rewriterService.js';
 import path from 'path';
 
 const listQuerySchema = z.object({
@@ -213,6 +214,23 @@ export async function registerNewsRoutes(
       } catch (error: any) {
         request.log.error(error);
         return reply.code(400).send({ message: error?.message || 'Failed to save image' });
+      }
+    }
+  );
+
+  fastify.post(
+    '/news/:id/rewrite',
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      try {
+        const { updatedNews, rewrite } = await rewriteNews(id);
+        return reply.code(200).send({ news: serialize(updatedNews as any), rewrite });
+      } catch (error: any) {
+        request.log.error(error);
+        const message = error?.message || 'Failed to rewrite news';
+        if (message === 'News not found') return reply.notFound(message);
+        return reply.code(500).send({ message });
       }
     }
   );
