@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { prisma } from '../prisma.js';
 import { requireAdmin } from '../auth.js';
 import { createNewsSchema, publishSchema, updateNewsSchema } from '../schemas/news.js';
+import { saveNewsImageFromBuffer } from '../utils/storage.js';
+import path from 'path';
 
 const listQuerySchema = z.object({
   published: z
@@ -19,6 +21,12 @@ const listQuerySchema = z.object({
   content_status: z.enum(['empty', 'filled']).optional(),
   category_id: z.string().uuid().optional(),
   tag_id: z.string().uuid().optional()
+});
+
+const imageUploadSchema = z.object({
+  image_base64: z.string().min(1),
+  filename: z.string().optional(),
+  content_type: z.string().optional()
 });
 
 function serialize(news: News) {
@@ -156,6 +164,55 @@ export async function registerNewsRoutes(
       } catch (error) {
         request.log.error(error);
         return reply.notFound('News not found');
+      }
+    }
+  );
+
+  fastify.post(
+    '/news/:id/image',
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const parsed = imageUploadSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send(parsed.error.flatten());
+      }
+
+      const decodeBase64Image = (input: string) => {
+        const dataPart = input.includes('base64,') ? input.split('base64,')[1] : input;
+        if (!dataPart) throw new Error('Invalid base64 payload');
+        return Buffer.from(dataPart, 'base64');
+      };
+
+      const guessExt = (filename?: string, contentType?: string) => {
+        const map: Record<string, string> = {
+          'image/jpeg': 'jpg',
+          'image/png': 'png',
+          'image/webp': 'webp',
+          'image/gif': 'gif'
+        };
+        if (contentType && map[contentType]) return map[contentType];
+        if (filename) {
+          const ext = path.extname(filename).replace('.', '');
+          if (ext) return ext;
+        }
+        return undefined;
+      };
+
+      try {
+        const buffer = decodeBase64Image(parsed.data.image_base64);
+        const ext = guessExt(parsed.data.filename, parsed.data.content_type);
+        const saved = await saveNewsImageFromBuffer(buffer, ext);
+
+        const news = await prisma.news.update({
+          where: { id },
+          data: { image_url: saved.publicPath }
+        });
+
+        return reply.code(200).send({ image_url: news.image_url, stored_as: saved.filename });
+      } catch (error: any) {
+        request.log.error(error);
+        return reply.code(400).send({ message: error?.message || 'Failed to save image' });
       }
     }
   );
