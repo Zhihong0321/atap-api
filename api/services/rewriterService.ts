@@ -15,7 +15,15 @@ const ACCOUNT_NAME = 'zhihong0321@gmail';
 
 type RewriterResponse = {
   meta?: {
+    headline_query?: string;
+    date_query?: string;
+    generated_utc?: string;
     image_url?: string;
+  };
+  article?: {
+    en_html?: string;
+    zh_cn_html?: string;
+    ms_my_html?: string;
   };
   data?: {
     en?: LanguageContent;
@@ -32,6 +40,39 @@ type LanguageContent = {
   analysis?: Record<string, any>;
   background_context?: string;
 };
+
+function buildRewritePrompt(headline: string, tagNames?: string[]) {
+  const tagSection = tagNames && tagNames.length
+    ? `Select up to 3 tags strictly from this list: [${tagNames.join(', ')}] and return them as a "tags" array.`
+    : 'If no tags list is provided, return an empty "tags" array.';
+
+  return `Rewrite the following news headline into structured JSON.
+
+Headline: "${headline}"
+
+Return ONLY valid JSON (no markdown fences) with this shape:
+{
+  "meta": {
+    "headline_query": string,
+    "date_query": string (YYYY-MM-DD if available, else today),
+    "generated_utc": string (ISO),
+    "image_url": string | null
+  },
+  "article": {
+    "en_html": string,
+    "zh_cn_html": string,
+    "ms_my_html": string
+  },
+  "tags": string[],
+  "source_urls": string[]
+}
+
+Content rules:
+- Provide concise, publish-ready HTML paragraphs and bullet lists in each language field.
+- ${tagSection}
+- Do not include markdown code fences.
+- Keep output strictly valid JSON.`;
+}
 
 async function callRewriterApi(query: string): Promise<RewriterResponse> {
   const url = new URL(PERPLEXITY_API_URL);
@@ -101,18 +142,18 @@ export async function processRewriteQueue() {
     if (!lead.news_id || !lead.news) continue;
 
     try {
-      let query = lead.headline;
       let availableTags: any[] = [];
-
-      // Construct prompt with tags if category exists
       if (lead.news.category && lead.news.category.tags.length > 0) {
         availableTags = lead.news.category.tags;
-        const tagNames = availableTags.map(t => t.name).join(', ');
-        query = `Headline: "${lead.headline}".\n\nTask: Rewrite this news and also select up to 3 most relevant tags from this list: [${tagNames}].\nOutput JSON with "tags" array included.`;
       }
 
+      const prompt = buildRewritePrompt(
+        lead.headline,
+        availableTags.map((t) => t.name)
+      );
+
       // 2. Schedule API call with Rate Limiter
-      const result = await REWRITER_RATE_LIMITER.add(() => callRewriterApi(query));
+      const result = await REWRITER_RATE_LIMITER.add(() => callRewriterApi(prompt));
       
       // Match returned tags with DB tags
       const connectTags: { id: string }[] = [];
@@ -123,15 +164,20 @@ export async function processRewriteQueue() {
         });
       }
 
+      const content_en = result.article?.en_html ?? formatContent(result.data?.en);
+      const content_cn = result.article?.zh_cn_html ?? formatContent(result.data?.zh_cn);
+      const content_my = result.article?.ms_my_html ?? formatContent(result.data?.ms_my);
+      const sourcesArray = Array.isArray(result.source_urls) ? result.source_urls : [];
+
       // 3. Update Database
       const updatedNews = await prisma.news.update({
         where: { id: lead.news_id },
         data: {
-          content_en: formatContent(result.data?.en),
-          content_cn: formatContent(result.data?.zh_cn),
-          content_my: formatContent(result.data?.ms_my),
+          content_en,
+          content_cn,
+          content_my,
           image_url: result.meta?.image_url || null,
-          sources: result.source_urls as any, // Save sources array
+          sources: sourcesArray as any, // Save sources array
           tags: {
             connect: connectTags
           }
