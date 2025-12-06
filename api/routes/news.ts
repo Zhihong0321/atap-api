@@ -110,13 +110,46 @@ export async function registerNewsRoutes(
         return reply.code(400).send(parsed.error.flatten());
       }
 
+      // Accept multiple shapes for category input
+      const resolveCategoryId = (body: any): string | null | undefined => {
+        if (!body || typeof body !== 'object') return undefined;
+        if ('category_id' in body) return body.category_id ?? null;
+        if ('categoryId' in body) return body.categoryId ?? null;
+        if ('category' in body) {
+          const cat = body.category;
+          if (cat === null) return null;
+          if (typeof cat === 'string') return cat;
+          if (cat && typeof cat === 'object') {
+            if ('connect' in cat && cat.connect?.id) return cat.connect.id;
+            if ('id' in cat && cat.id) return cat.id;
+          }
+        }
+        return undefined;
+      };
+
+      const categoryInput = resolveCategoryId(request.body);
+      let categoryData: { connect?: { id: string }; disconnect?: boolean } | undefined;
+
+      if (categoryInput !== undefined) {
+        if (categoryInput === null) {
+          categoryData = { disconnect: true };
+        } else {
+          const catIdParsed = z.string().uuid().safeParse(categoryInput);
+          if (!catIdParsed.success) {
+            return reply.code(400).send({ message: 'Invalid category id' });
+          }
+          categoryData = { connect: { id: catIdParsed.data } };
+        }
+      }
+
       try {
         const news = await prisma.news.update({
           where: { id },
           data: {
             ...parsed.data,
             news_date: parsed.data.news_date,
-            sources: parsed.data.sources ?? undefined
+            sources: parsed.data.sources ?? undefined,
+            ...(categoryData ? { category: categoryData } : {})
           }
         });
         return serialize(news);
