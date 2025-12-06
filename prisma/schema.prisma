@@ -107,3 +107,33 @@ model Tag {
   
   @@unique([category_id, name])
 }
+
+model TypeOfEvent {
+  id         String   @id @default(uuid())
+  name_en    String   @unique
+  name_cn    String   @unique
+  name_my    String   @unique
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+
+  calendar_items CalendarItem[]
+
+  @@map("type_of_event")
+}
+
+model CalendarItem {
+  id                String       @id @default(uuid())
+  date              DateTime     @db.Timestamptz(6)
+  type_of_event_id  String
+  title_en          String
+  title_cn          String
+  title_my          String
+  created_at        DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime     @updatedAt @db.Timestamptz(6)
+
+  type_of_event TypeOfEvent @relation(fields: [type_of_event_id], references: [id])
+
+  @@unique([type_of_event_id, date])
+  @@index([type_of_event_id])
+  @@map("calendar_item")
+}
