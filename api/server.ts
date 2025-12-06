@@ -10,7 +10,6 @@ import { registerNewsTaskRoutes } from './routes/newsTasks.js';
 import { registerNewsLeadRoutes } from './routes/newsLeads.js';
 import { registerCategoryRoutes } from './routes/categories.js';
 import { prisma } from './prisma.js';
-import { runSafeMigration } from './scripts/safe-migrate.js';
 import { requireAdmin } from './auth.js';
 
 async function buildServer() {
@@ -195,15 +194,6 @@ async function buildServer() {
 
   // Health under v1 prefix
   app.get('/api/v1/health', async () => ({ status: 'ok' }));
-
-  // Admin-only migration trigger
-  app.post('/api/v1/admin/run-safe-migrate', { preHandler: requireAdmin }, async (request, reply) => {
-    const result = await runSafeMigration();
-    if (!result.success) {
-      return reply.code(500).send(result);
-    }
-    return result;
-  });
 
   // Register routes under /api/v1
   await app.register(registerNewsRoutes as any, { prefix: '/api/v1' });

@@ -20,13 +20,11 @@
     "@prisma/client": "^5.20.0",
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
-    "pg": "^8.16.3",
     "prisma": "^5.20.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
-    "@types/pg": "^8.15.6",
     "tsx": "^4.16.2",
     "typescript": "^5.5.4"
   }
