@@ -20,6 +20,11 @@ type RewriterResponse = {
     generated_utc?: string;
     image_url?: string;
   };
+  titles?: {
+    en?: string;
+    zh_cn?: string;
+    ms_my?: string;
+  };
   article?: {
     en_html?: string;
     zh_cn_html?: string;
@@ -58,6 +63,11 @@ Return ONLY valid JSON (no markdown fences) with this shape:
     "generated_utc": string (ISO),
     "image_url": string | null
   },
+  "titles": {
+    "en": string,
+    "zh_cn": string,
+    "ms_my": string
+  },
   "article": {
     "en_html": string,
     "zh_cn_html": string,
@@ -69,6 +79,7 @@ Return ONLY valid JSON (no markdown fences) with this shape:
 
 Content rules:
 - Provide concise, publish-ready HTML paragraphs and bullet lists in each language field.
+- Provide translated titles in each language in the "titles" field.
 - ${tagSection}
 - Do not include markdown code fences.
 - Keep output strictly valid JSON.`;
@@ -164,6 +175,10 @@ export async function processRewriteQueue() {
         });
       }
 
+      const title_en = result.titles?.en ?? lead.news.title_en;
+      const title_cn = result.titles?.zh_cn ?? lead.news.title_cn;
+      const title_my = result.titles?.ms_my ?? lead.news.title_my;
+      
       const content_en = result.article?.en_html ?? formatContent(result.data?.en);
       const content_cn = result.article?.zh_cn_html ?? formatContent(result.data?.zh_cn);
       const content_my = result.article?.ms_my_html ?? formatContent(result.data?.ms_my);
@@ -173,6 +188,9 @@ export async function processRewriteQueue() {
       const updatedNews = await prisma.news.update({
         where: { id: lead.news_id },
         data: {
+          title_en,
+          title_cn,
+          title_my,
           content_en,
           content_cn,
           content_my,
@@ -234,6 +252,10 @@ export async function rewriteNews(newsId: string) {
     });
   }
 
+  const title_en = result.titles?.en ?? news.title_en;
+  const title_cn = result.titles?.zh_cn ?? news.title_cn;
+  const title_my = result.titles?.ms_my ?? news.title_my;
+  
   const content_en = result.article?.en_html ?? formatContent(result.data?.en);
   const content_cn = result.article?.zh_cn_html ?? formatContent(result.data?.zh_cn);
   const content_my = result.article?.ms_my_html ?? formatContent(result.data?.ms_my);
@@ -242,6 +264,9 @@ export async function rewriteNews(newsId: string) {
   const updatedNews = await prisma.news.update({
     where: { id: newsId },
     data: {
+      title_en,
+      title_cn,
+      title_my,
       content_en,
       content_cn,
       content_my,
