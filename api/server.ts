@@ -17,7 +17,11 @@ async function buildServer() {
     logger: true
   });
 
-  await app.register(cors, { origin: true });
+  await app.register(cors, { 
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  });
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(sensible);
 
@@ -208,9 +212,24 @@ async function buildServer() {
   return app;
 }
 
+async function waitForDb(retries = 5, delay = 2000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await prisma.$connect();
+      console.log('Database connected successfully.');
+      return;
+    } catch (err) {
+      console.error(`Database connection failed (attempt ${i + 1}/${retries}):`, err);
+      if (i === retries - 1) throw err;
+      await new Promise(res => setTimeout(res, delay));
+    }
+  }
+}
+
 async function start() {
   const app = await buildServer();
   try {
+    await waitForDb(); // Wait for DB before listening
     await app.listen({ port: apiConfig.port, host: apiConfig.host });
   } catch (err) {
     app.log.error(err);
