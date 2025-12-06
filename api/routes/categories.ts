@@ -14,13 +14,30 @@ export async function registerCategoryRoutes(app: FastifyInstance) {
   });
 
   // Create Category
-  app.post<{ Body: { name: string } }>('/categories', async (request, reply) => {
-    const { name } = request.body;
-    if (!name) return reply.badRequest('Name is required');
+  app.post<{ Body: { 
+    name_en: string; 
+    name_cn: string; 
+    name_my: string;
+    description_en?: string;
+    description_cn?: string;
+    description_my?: string;
+  } }>('/categories', async (request, reply) => {
+    const { name_en, name_cn, name_my, description_en, description_cn, description_my } = request.body;
+    
+    if (!name_en || !name_cn || !name_my) {
+      return reply.badRequest('All language names are required');
+    }
 
     try {
       const category = await prisma.category.create({
-        data: { name },
+        data: { 
+          name_en, 
+          name_cn, 
+          name_my,
+          description_en,
+          description_cn,
+          description_my
+        },
         include: { tags: true }
       });
       return category;
@@ -33,14 +50,29 @@ export async function registerCategoryRoutes(app: FastifyInstance) {
   });
 
   // Update Category
-  app.put<{ Params: { id: string }, Body: { name: string } }>('/categories/:id', async (request, reply) => {
+  app.put<{ Params: { id: string }, Body: { 
+    name_en?: string; 
+    name_cn?: string; 
+    name_my?: string;
+    description_en?: string;
+    description_cn?: string;
+    description_my?: string;
+  } }>('/categories/:id', async (request, reply) => {
     const { id } = request.params;
-    const { name } = request.body;
+    const { name_en, name_cn, name_my, description_en, description_cn, description_my } = request.body;
+    
+    const updateData: any = {};
+    if (name_en !== undefined) updateData.name_en = name_en;
+    if (name_cn !== undefined) updateData.name_cn = name_cn;
+    if (name_my !== undefined) updateData.name_my = name_my;
+    if (description_en !== undefined) updateData.description_en = description_en;
+    if (description_cn !== undefined) updateData.description_cn = description_cn;
+    if (description_my !== undefined) updateData.description_my = description_my;
     
     try {
       const category = await prisma.category.update({
         where: { id },
-        data: { name }
+        data: updateData
       });
       return category;
     } catch (error: any) {

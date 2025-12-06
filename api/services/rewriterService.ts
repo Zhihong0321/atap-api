@@ -46,14 +46,19 @@ type LanguageContent = {
   background_context?: string;
 };
 
-function buildRewritePrompt(headline: string, tagNames?: string[]) {
+function buildRewritePrompt(headline: string, tagNames?: string[], categoryInfo?: {name?: string, description?: string}) {
   const tagSection = tagNames && tagNames.length
     ? `Select up to 3 tags strictly from this list: [${tagNames.join(', ')}] and return them as a "tags" array.`
     : 'If no tags list is provided, return an empty "tags" array.';
+    
+  const categorySection = categoryInfo 
+    ? `Category context: ${categoryInfo.name}${categoryInfo.description ? ` - ${categoryInfo.description}` : ''}.`
+    : '';
 
   return `Rewrite the following news headline into structured JSON.
 
 Headline: "${headline}"
+${categorySection}
 
 Return ONLY valid JSON (no markdown fences) with this shape:
 {
@@ -81,6 +86,7 @@ Content rules:
 - Provide concise, publish-ready HTML paragraphs and bullet lists in each language field.
 - Provide translated titles in each language in the "titles" field.
 - ${tagSection}
+- ${categorySection ? 'Tailor content to match the category context and theme.' : ''}
 - Do not include markdown code fences.
 - Keep output strictly valid JSON.`;
 }
@@ -154,13 +160,21 @@ export async function processRewriteQueue() {
 
     try {
       let availableTags: any[] = [];
-      if (lead.news.category && lead.news.category.tags.length > 0) {
-        availableTags = lead.news.category.tags;
+      let categoryInfo: {name?: string, description?: string} | undefined = undefined;
+      if (lead.news.category) {
+        if (lead.news.category.tags.length > 0) {
+          availableTags = lead.news.category.tags;
+        }
+        categoryInfo = {
+          name: lead.news.category.name_en, // Use new multilingual name field
+          description: lead.news.category.description_en || undefined
+        };
       }
 
       const prompt = buildRewritePrompt(
         lead.headline,
-        availableTags.map((t) => t.name)
+        availableTags.map((t) => t.name),
+        categoryInfo
       );
 
       // 2. Schedule API call with Rate Limiter
@@ -236,10 +250,15 @@ export async function rewriteNews(newsId: string) {
   }
 
   const availableTags = news.category?.tags ?? [];
+  const categoryInfo = news.category ? {
+    name: news.category.name_en, // Use new multilingual name field
+    description: news.category.description_en || undefined
+  } : undefined;
 
   const prompt = buildRewritePrompt(
     news.title_en || news.title_cn || news.title_my,
-    availableTags.map((t) => t.name)
+    availableTags.map((t) => t.name),
+    categoryInfo
   );
 
   const result = await REWRITER_RATE_LIMITER.add(() => callRewriterApi(prompt));

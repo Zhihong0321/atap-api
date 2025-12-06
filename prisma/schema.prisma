@@ -80,14 +80,19 @@ model NewsLead {
 }
 
 model Category {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  created_at  DateTime @default(now()) @db.Timestamptz(6)
-  updated_at  DateTime @updatedAt @db.Timestamptz(6)
+  id             String   @id @default(uuid())
+  name_en        String   @unique
+  name_cn        String   @unique
+  name_my        String   @unique
+  description_en String?
+  description_cn String?
+  description_my String?
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @updatedAt @db.Timestamptz(6)
 
-  tags        Tag[]
-  news        News[]
-  tasks       NewsTask[]
+  tags           Tag[]
+  news           News[]
+  tasks          NewsTask[]
 }
 
 model Tag {
