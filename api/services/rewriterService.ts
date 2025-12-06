@@ -178,6 +178,7 @@ export async function processRewriteQueue() {
           content_my,
           image_url: result.meta?.image_url || null,
           sources: sourcesArray as any, // Save sources array
+          category_id: lead.news.category_id, // Preserve the existing category
           tags: {
             connect: connectTags
           }
@@ -246,6 +247,7 @@ export async function rewriteNews(newsId: string) {
       content_my,
       image_url: result.meta?.image_url || null,
       sources: sourcesArray as any,
+      category_id: news.category_id, // Preserve the existing category
       tags: { connect: connectTags }
     }
   });
