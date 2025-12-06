@@ -55,7 +55,7 @@ const newsSchema = {
     updated_at: { type: 'string', format: 'date-time' },
     category_id: { type: 'string', format: 'uuid', nullable: true },
     category: { ...categorySchema, nullable: true },
-    tags: { type: 'array', items: tagSchema }
+    tags: { type: 'array', items: tagSchema, nullable: true }
   },
   required: [
     'id',
@@ -70,8 +70,7 @@ const newsSchema = {
     'is_highlight',
     'created_at',
     'updated_at',
-    'sources',
-    'tags'
+    'sources'
   ]
 } as const;
 
@@ -457,7 +456,8 @@ export async function registerNewsRoutes(
             ...(parsed.data.is_highlight !== undefined
               ? { is_highlight: parsed.data.is_highlight }
               : {})
-          }
+          },
+          include: { category: true, tags: true }
         });
         return serialize(news);
       } catch (error) {
