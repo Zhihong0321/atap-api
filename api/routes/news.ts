@@ -36,6 +36,20 @@ const categorySchema = {
   required: ['id', 'name_en', 'name_cn', 'name_my', 'created_at', 'updated_at']
 } as const;
 
+const newsSourceSchema = {
+  anyOf: [
+    { type: 'string' },
+    {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        url: { type: 'string' }
+      },
+      additionalProperties: false
+    }
+  ]
+} as const;
+
 const newsSchema = {
   type: 'object',
   properties: {
@@ -48,7 +62,7 @@ const newsSchema = {
     content_my: { type: 'string' },
     news_date: { type: 'string', format: 'date-time' },
     image_url: { type: 'string', nullable: true },
-    sources: { type: 'array', items: { type: 'object' } },
+    sources: { type: 'array', items: newsSourceSchema },
     is_published: { type: 'boolean' },
     is_highlight: { type: 'boolean' },
     created_at: { type: 'string', format: 'date-time' },
@@ -209,7 +223,7 @@ export async function registerNewsRoutes(
           content_cn: { type: 'string' },
           content_my: { type: 'string' },
           news_date: { type: 'string', format: 'date-time' },
-          sources: { type: 'array', items: { type: 'object' } },
+          sources: { type: 'array', items: newsSourceSchema },
           is_published: { type: 'boolean' },
           is_highlight: { type: 'boolean' },
           category_id: { type: 'string', format: 'uuid' }
@@ -251,7 +265,7 @@ export async function registerNewsRoutes(
           content_cn: { type: 'string' },
           content_my: { type: 'string' },
           news_date: { type: 'string', format: 'date-time' },
-          sources: { type: 'array', items: { type: 'object' } },
+          sources: { type: 'array', items: newsSourceSchema },
           is_published: { type: 'boolean' },
           is_highlight: { type: 'boolean' },
           category_id: { type: 'string', format: 'uuid' },
