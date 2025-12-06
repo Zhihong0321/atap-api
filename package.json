@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx api/server.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "npx prisma db push && node dist-api/api/server.js",
+    "start": "npx prisma migrate deploy && node dist-api/api/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy"
