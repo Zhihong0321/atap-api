@@ -141,3 +141,14 @@ All Admin endpoints require the `Authorization` header (Bearer Token).
     "stored_as": "abc.png"
   }
   ```
+
+### Rewrite a Single News Item (Admin)
+**POST** `/news/:id/rewrite`
+- **Description**: Rewrites the specified news item using the News Rewriter (Perplexity) and updates its content, image, sources, and tags.
+- **Response**:
+  ```json
+  {
+    "news": { /* updated news object */ },
+    "rewrite": { /* raw rewriter response (meta, article, tags, source_urls) */ }
+  }
+  ```
