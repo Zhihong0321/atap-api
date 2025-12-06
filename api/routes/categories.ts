@@ -77,7 +77,7 @@ export async function registerCategoryRoutes(app: FastifyInstance) {
       return category;
     } catch (error: any) {
       if (error.code === 'P2025') {
-        return reply.notFound('Category not found');
+        return reply.code(404).send({ message: 'Category not found' });
       }
       throw error;
     }
@@ -91,7 +91,7 @@ export async function registerCategoryRoutes(app: FastifyInstance) {
       return { success: true };
     } catch (error: any) {
       if (error.code === 'P2025') {
-        return reply.notFound('Category not found');
+        return reply.code(404).send({ message: 'Category not found' });
       }
       throw error;
     }
@@ -118,7 +118,7 @@ export async function registerCategoryRoutes(app: FastifyInstance) {
       }
       // Check if category exists
       const category = await prisma.category.findUnique({ where: { id } });
-      if (!category) return reply.notFound('Category not found');
+      if (!category) return reply.code(404).send({ message: 'Category not found' });
       
       throw error;
     }
