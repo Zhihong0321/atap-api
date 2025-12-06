@@ -32,6 +32,11 @@ async function buildServer() {
     routePrefix: '/docs'
   });
 
+  // Root route redirect
+  app.get('/', async (request, reply) => {
+    return reply.redirect('/api-guide');
+  });
+
   // API Documentation Page (Markdown Render)
   app.get('/api-guide', async (request, reply) => {
     const html = `
