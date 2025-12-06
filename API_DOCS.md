@@ -122,3 +122,22 @@ All Admin endpoints require the `Authorization` header (Bearer Token).
     "is_highlight": false
   }
   ```
+
+### Upload/Set News Image (Admin)
+**POST** `/news/:id/image`
+- **Body**:
+  ```json
+  {
+    "image_base64": "data:image/png;base64,...." ,
+    "filename": "optional.png",
+    "content_type": "image/png"
+  }
+  ```
+- **Behavior**: Saves the uploaded image to server storage and updates `image_url` for the news item.
+- **Response**:
+  ```json
+  {
+    "image_url": "https://cdn.example.com/uploads/news/abc.png",
+    "stored_as": "abc.png"
+  }
+  ```
