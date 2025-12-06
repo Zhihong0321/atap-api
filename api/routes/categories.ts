@@ -1,9 +1,49 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../prisma.js';
 
+const tagSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    name: { type: 'string' },
+    category_id: { type: 'string', format: 'uuid' },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' }
+  },
+  required: ['id', 'name', 'category_id', 'created_at', 'updated_at']
+} as const;
+
+const categorySchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    name_en: { type: 'string' },
+    name_cn: { type: 'string' },
+    name_my: { type: 'string' },
+    description_en: { type: 'string', nullable: true },
+    description_cn: { type: 'string', nullable: true },
+    description_my: { type: 'string', nullable: true },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
+    tags: { type: 'array', items: tagSchema }
+  },
+  required: ['id', 'name_en', 'name_cn', 'name_my', 'created_at', 'updated_at', 'tags']
+} as const;
+
 export async function registerCategoryRoutes(app: FastifyInstance) {
   // List Categories
-  app.get('/categories', async (request, reply) => {
+  app.get('/categories', {
+    schema: {
+      tags: ['Categories'],
+      summary: 'List categories',
+      response: {
+        200: {
+          type: 'array',
+          items: categorySchema
+        }
+      }
+    }
+  }, async (request, reply) => {
     const categories = await prisma.category.findMany({
       include: {
         tags: true
@@ -21,7 +61,32 @@ export async function registerCategoryRoutes(app: FastifyInstance) {
     description_en?: string;
     description_cn?: string;
     description_my?: string;
-  } }>('/categories', async (request, reply) => {
+  } }>('/categories', {
+    schema: {
+      tags: ['Categories'],
+      summary: 'Create category',
+      body: {
+        type: 'object',
+        required: ['name_en', 'name_cn', 'name_my'],
+        properties: {
+          name_en: { type: 'string' },
+          name_cn: { type: 'string' },
+          name_my: { type: 'string' },
+          description_en: { type: 'string' },
+          description_cn: { type: 'string' },
+          description_my: { type: 'string' }
+        }
+      },
+      response: {
+        201: categorySchema,
+        409: {
+          type: 'object',
+          properties: { message: { type: 'string' } },
+          required: ['message']
+        }
+      }
+    }
+  }, async (request, reply) => {
     const { name_en, name_cn, name_my, description_en, description_cn, description_my } = request.body;
     
     if (!name_en || !name_cn || !name_my) {
@@ -57,7 +122,36 @@ export async function registerCategoryRoutes(app: FastifyInstance) {
     description_en?: string;
     description_cn?: string;
     description_my?: string;
-  } }>('/categories/:id', async (request, reply) => {
+  } }>('/categories/:id', {
+    schema: {
+      tags: ['Categories'],
+      summary: 'Update category',
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'string', format: 'uuid' } }
+      },
+      body: {
+        type: 'object',
+        properties: {
+          name_en: { type: 'string' },
+          name_cn: { type: 'string' },
+          name_my: { type: 'string' },
+          description_en: { type: 'string' },
+          description_cn: { type: 'string' },
+          description_my: { type: 'string' }
+        }
+      },
+      response: {
+        200: categorySchema,
+        404: {
+          type: 'object',
+          properties: { message: { type: 'string' } },
+          required: ['message']
+        }
+      }
+    }
+  }, async (request, reply) => {
     const { id } = request.params;
     const { name_en, name_cn, name_my, description_en, description_cn, description_my } = request.body;
     
@@ -84,7 +178,29 @@ export async function registerCategoryRoutes(app: FastifyInstance) {
   });
 
   // Delete Category
-  app.delete<{ Params: { id: string } }>('/categories/:id', async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/categories/:id', {
+    schema: {
+      tags: ['Categories'],
+      summary: 'Delete category',
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'string', format: 'uuid' } }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: { success: { type: 'boolean' } },
+          required: ['success']
+        },
+        404: {
+          type: 'object',
+          properties: { message: { type: 'string' } },
+          required: ['message']
+        }
+      }
+    }
+  }, async (request, reply) => {
     const { id } = request.params;
     try {
       await prisma.category.delete({ where: { id } });
@@ -98,7 +214,35 @@ export async function registerCategoryRoutes(app: FastifyInstance) {
   });
 
   // Create Tag under Category
-  app.post<{ Params: { id: string }, Body: { name: string } }>('/categories/:id/tags', async (request, reply) => {
+  app.post<{ Params: { id: string }, Body: { name: string } }>('/categories/:id/tags', {
+    schema: {
+      tags: ['Categories'],
+      summary: 'Create tag for category',
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'string', format: 'uuid' } }
+      },
+      body: {
+        type: 'object',
+        required: ['name'],
+        properties: { name: { type: 'string' } }
+      },
+      response: {
+        200: tagSchema,
+        404: {
+          type: 'object',
+          properties: { message: { type: 'string' } },
+          required: ['message']
+        },
+        409: {
+          type: 'object',
+          properties: { message: { type: 'string' } },
+          required: ['message']
+        }
+      }
+    }
+  }, async (request, reply) => {
     const { id } = request.params;
     const { name } = request.body;
     
@@ -125,7 +269,29 @@ export async function registerCategoryRoutes(app: FastifyInstance) {
   });
 
   // Delete Tag
-  app.delete<{ Params: { id: string } }>('/tags/:id', async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/tags/:id', {
+    schema: {
+      tags: ['Categories'],
+      summary: 'Delete tag',
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'string', format: 'uuid' } }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: { success: { type: 'boolean' } },
+          required: ['success']
+        },
+        404: {
+          type: 'object',
+          properties: { message: { type: 'string' } },
+          required: ['message']
+        }
+      }
+    }
+  }, async (request, reply) => {
      const { id } = request.params;
      try {
        await prisma.tag.delete({ where: { id } });

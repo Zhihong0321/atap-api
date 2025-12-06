@@ -7,7 +7,11 @@ export async function registerNewsLeadRoutes(
   opts: FastifyRegisterOptions<never>
 ) {
   // Manual Trigger for Batch Rewrite
-  fastify.post('/news-leads/process-rewrites', { preHandler: requireAdmin }, async (request, reply) => {
+  fastify.post('/news-leads/process-rewrites', { preHandler: requireAdmin, schema: {
+    tags: ['News Leads'],
+    summary: 'Process rewrite queue',
+    response: { 200: { type: 'object' }, 500: { type: 'object' } }
+  } }, async (request, reply) => {
     try {
       const result = await processRewriteQueue();
       return reply.code(200).send(result);

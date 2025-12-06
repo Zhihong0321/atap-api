@@ -8,6 +8,86 @@ import { saveNewsImageFromBuffer } from '../utils/storage.js';
 import { rewriteNews } from '../services/rewriterService.js';
 import path from 'path';
 
+const tagSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    name: { type: 'string' },
+    category_id: { type: 'string', format: 'uuid' },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' }
+  },
+  required: ['id', 'name', 'category_id', 'created_at', 'updated_at']
+} as const;
+
+const categorySchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    name_en: { type: 'string' },
+    name_cn: { type: 'string' },
+    name_my: { type: 'string' },
+    description_en: { type: 'string', nullable: true },
+    description_cn: { type: 'string', nullable: true },
+    description_my: { type: 'string', nullable: true },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' }
+  },
+  required: ['id', 'name_en', 'name_cn', 'name_my', 'created_at', 'updated_at']
+} as const;
+
+const newsSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    title_en: { type: 'string' },
+    title_cn: { type: 'string' },
+    title_my: { type: 'string' },
+    content_en: { type: 'string' },
+    content_cn: { type: 'string' },
+    content_my: { type: 'string' },
+    news_date: { type: 'string', format: 'date-time' },
+    image_url: { type: 'string', nullable: true },
+    sources: { type: 'array', items: { type: 'object' } },
+    is_published: { type: 'boolean' },
+    is_highlight: { type: 'boolean' },
+    created_at: { type: 'string', format: 'date-time' },
+    updated_at: { type: 'string', format: 'date-time' },
+    category_id: { type: 'string', format: 'uuid', nullable: true },
+    category: { ...categorySchema, nullable: true },
+    tags: { type: 'array', items: tagSchema }
+  },
+  required: [
+    'id',
+    'title_en',
+    'title_cn',
+    'title_my',
+    'content_en',
+    'content_cn',
+    'content_my',
+    'news_date',
+    'is_published',
+    'is_highlight',
+    'created_at',
+    'updated_at',
+    'sources',
+    'tags'
+  ]
+} as const;
+
+const listQueryJsonSchema = {
+  type: 'object',
+  properties: {
+    published: { type: 'string', enum: ['true', 'false'] },
+    highlight: { type: 'string', enum: ['true', 'false'] },
+    limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+    offset: { type: 'integer', minimum: 0, default: 0 },
+    content_status: { type: 'string', enum: ['empty', 'filled'] },
+    category_id: { type: 'string', format: 'uuid' },
+    tag_id: { type: 'string', format: 'uuid' }
+  }
+} as const;
+
 const listQuerySchema = z.object({
   published: z
     .enum(['true', 'false'])
@@ -41,7 +121,23 @@ export async function registerNewsRoutes(
   fastify: FastifyInstance,
   opts: FastifyRegisterOptions<never>
 ) {
-  fastify.get('/news', async (request, reply) => {
+  fastify.get('/news', {
+    schema: {
+      tags: ['News'],
+      summary: 'List news',
+      querystring: listQueryJsonSchema,
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            data: { type: 'array', items: newsSchema }
+          },
+          required: ['data']
+        },
+        400: { type: 'object' }
+      }
+    }
+  }, async (request, reply) => {
     const parsed = listQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send(parsed.error.flatten());
@@ -76,7 +172,17 @@ export async function registerNewsRoutes(
     return { data: data.map(serialize) };
   });
 
-  fastify.get('/news/:id', async (request, reply) => {
+  fastify.get('/news/:id', {
+    schema: {
+      tags: ['News'],
+      summary: 'Get news detail',
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
+      response: {
+        200: newsSchema,
+        404: { type: 'object' }
+      }
+    }
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const news = await prisma.news.findUnique({ 
         where: { id },
@@ -90,7 +196,28 @@ export async function registerNewsRoutes(
 
   fastify.post(
     '/news',
-    { preHandler: requireAdmin },
+    { preHandler: requireAdmin, schema: {
+      tags: ['News'],
+      summary: 'Create news',
+      body: {
+        type: 'object',
+        required: ['title_en','title_cn','title_my','content_en','content_cn','content_my','news_date'],
+        properties: {
+          title_en: { type: 'string' },
+          title_cn: { type: 'string' },
+          title_my: { type: 'string' },
+          content_en: { type: 'string' },
+          content_cn: { type: 'string' },
+          content_my: { type: 'string' },
+          news_date: { type: 'string', format: 'date-time' },
+          sources: { type: 'array', items: { type: 'object' } },
+          is_published: { type: 'boolean' },
+          is_highlight: { type: 'boolean' },
+          category_id: { type: 'string', format: 'uuid' }
+        }
+      },
+      response: { 201: newsSchema, 400: { type: 'object' } }
+    } },
     async (request, reply) => {
       const parsed = createNewsSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -111,7 +238,30 @@ export async function registerNewsRoutes(
 
   fastify.put(
     '/news/:id',
-    { preHandler: requireAdmin },
+    { preHandler: requireAdmin, schema: {
+      tags: ['News'],
+      summary: 'Update news',
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
+      body: {
+        type: 'object',
+        properties: {
+          title_en: { type: 'string' },
+          title_cn: { type: 'string' },
+          title_my: { type: 'string' },
+          content_en: { type: 'string' },
+          content_cn: { type: 'string' },
+          content_my: { type: 'string' },
+          news_date: { type: 'string', format: 'date-time' },
+          sources: { type: 'array', items: { type: 'object' } },
+          is_published: { type: 'boolean' },
+          is_highlight: { type: 'boolean' },
+          category_id: { type: 'string', format: 'uuid' },
+          categoryId: { type: 'string', format: 'uuid' },
+          category: { type: 'object' }
+        }
+      },
+      response: { 200: newsSchema, 400: { type: 'object' }, 404: { type: 'object' } }
+    } },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = updateNewsSchema.safeParse(request.body);
@@ -171,7 +321,31 @@ export async function registerNewsRoutes(
 
   fastify.post(
     '/news/:id/image',
-    { preHandler: requireAdmin },
+    { preHandler: requireAdmin, schema: {
+      tags: ['News'],
+      summary: 'Upload/set news image',
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
+      body: {
+        type: 'object',
+        required: ['image_base64'],
+        properties: {
+          image_base64: { type: 'string' },
+          filename: { type: 'string' },
+          content_type: { type: 'string' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            image_url: { type: 'string', nullable: true },
+            stored_as: { type: 'string' }
+          },
+          required: ['image_url', 'stored_as']
+        },
+        400: { type: 'object' }
+      }
+    } },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = imageUploadSchema.safeParse(request.body);
@@ -220,7 +394,23 @@ export async function registerNewsRoutes(
 
   fastify.post(
     '/news/:id/rewrite',
-    { preHandler: requireAdmin },
+    { preHandler: requireAdmin, schema: {
+      tags: ['News'],
+      summary: 'Rewrite news content',
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            news: newsSchema,
+            rewrite: { type: 'object' }
+          },
+          required: ['news', 'rewrite']
+        },
+        404: { type: 'object' },
+        500: { type: 'object' }
+      }
+    } },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       try {
@@ -237,7 +427,19 @@ export async function registerNewsRoutes(
 
   fastify.patch(
     '/news/:id/publish',
-    { preHandler: requireAdmin },
+    { preHandler: requireAdmin, schema: {
+      tags: ['News'],
+      summary: 'Publish/highlight toggle',
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
+      body: {
+        type: 'object',
+        properties: {
+          is_published: { type: 'boolean' },
+          is_highlight: { type: 'boolean' }
+        }
+      },
+      response: { 200: newsSchema, 400: { type: 'object' }, 404: { type: 'object' } }
+    } },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const parsed = publishSchema.safeParse(request.body);
@@ -267,7 +469,12 @@ export async function registerNewsRoutes(
 
   fastify.delete(
     '/news/:id',
-    { preHandler: requireAdmin },
+    { preHandler: requireAdmin, schema: {
+      tags: ['News'],
+      summary: 'Delete news',
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
+      response: { 204: { type: 'null' }, 404: { type: 'object' } }
+    } },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       try {
