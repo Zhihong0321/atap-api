@@ -8,6 +8,70 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model agents {
+  id              Int       @id @default(autoincrement())
+  bubble_id       String?   @unique @db.VarChar(255)
+  name            String?   @db.VarChar(255)
+  email           String?   @db.VarChar(255)
+  phone           String?   @db.VarChar(50)
+  status          String?   @default("active") @db.VarChar(50)
+  commission_rate Decimal?  @db.Decimal(5, 2)
+  created_date    DateTime? @db.Timestamp(6)
+  modified_date   DateTime? @default(now()) @db.Timestamp(6)
+  data            Json?
+}
+
+model contacts {
+  id            Int       @id @default(autoincrement())
+  bubble_id     String?   @unique @db.VarChar(255)
+  name          String?   @db.VarChar(255)
+  email         String?   @db.VarChar(255)
+  phone         String?   @db.VarChar(50)
+  company       String?   @db.VarChar(255)
+  status        String?   @default("active") @db.VarChar(50)
+  created_date  DateTime? @db.Timestamp(6)
+  modified_date DateTime? @default(now()) @db.Timestamp(6)
+  data          Json?
+}
+
+model products {
+  id            Int       @id @default(autoincrement())
+  bubble_id     String?   @unique @db.VarChar(255)
+  name          String?   @db.VarChar(255)
+  description   String?
+  price         Decimal?  @db.Decimal(10, 2)
+  category      String?   @db.VarChar(255)
+  status        String?   @default("active") @db.VarChar(50)
+  created_date  DateTime? @db.Timestamp(6)
+  modified_date DateTime? @default(now()) @db.Timestamp(6)
+  data          Json?
+}
+
+model sync_status {
+  id                  Int       @id @default(autoincrement())
+  table_name          String    @unique @db.VarChar(255)
+  last_sync_timestamp DateTime? @db.Timestamp(6)
+  total_records       Int?      @default(0)
+  sync_status         String?   @default("pending") @db.VarChar(50)
+  error_message       String?
+  created_at          DateTime? @default(now()) @db.Timestamp(6)
+  updated_at          DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model synced_records {
+  id             Int       @id @default(autoincrement())
+  table_name     String    @db.VarChar(255)
+  bubble_id      String    @db.VarChar(255)
+  local_id       Int?
+  sync_timestamp DateTime? @default(now()) @db.Timestamp(6)
+  data_hash      String?   @db.VarChar(255)
+  status         String?   @default("synced") @db.VarChar(50)
+
+  @@unique([table_name, bubble_id])
+}
+
+// --- New Models for Solar News App ---
+
 enum NewsTaskStatus {
   pending
   running
@@ -39,6 +103,10 @@ model News {
   updated_at  DateTime @updatedAt @db.Timestamptz(6)
 
   news_lead   NewsLead?
+
+  category_id String?
+  category    Category? @relation(fields: [category_id], references: [id])
+  tags        Tag[]     @relation("NewsTags")
 }
 
 model NewsTask {
@@ -52,6 +120,9 @@ model NewsTask {
   updated_at      DateTime       @updatedAt @db.Timestamptz(6)
 
   leads NewsLead[]
+  
+  category_id String?
+  category    Category? @relation(fields: [category_id], references: [id])
 }
 
 model NewsLead {
@@ -68,4 +139,28 @@ model NewsLead {
   updated_at    DateTime       @updatedAt @db.Timestamptz(6)
 
   @@unique([task_id, headline])
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @updatedAt @db.Timestamptz(6)
+
+  tags        Tag[]
+  news        News[]
+  tasks       NewsTask[]
+}
+
+model Tag {
+  id          String   @id @default(uuid())
+  name        String
+  category_id String
+  category    Category @relation(fields: [category_id], references: [id], onDelete: Cascade)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @updatedAt @db.Timestamptz(6)
+
+  news        News[]   @relation("NewsTags")
+  
+  @@unique([category_id, name])
 }

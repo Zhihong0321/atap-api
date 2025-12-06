@@ -16,7 +16,9 @@ const listQuerySchema = z.object({
     .transform((val) => (val === undefined ? undefined : val === 'true')),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
-  content_status: z.enum(['empty', 'filled']).optional()
+  content_status: z.enum(['empty', 'filled']).optional(),
+  category_id: z.string().uuid().optional(),
+  tag_id: z.string().uuid().optional()
 });
 
 function serialize(news: News) {
@@ -35,11 +37,13 @@ export async function registerNewsRoutes(
     if (!parsed.success) {
       return reply.code(400).send(parsed.error.flatten());
     }
-    const { published, highlight, limit, offset, content_status } = parsed.data;
+    const { published, highlight, limit, offset, content_status, category_id, tag_id } = parsed.data;
 
     const where: Record<string, unknown> = {};
     if (published !== undefined) where.is_published = published;
     if (highlight !== undefined) where.is_highlight = highlight;
+    if (category_id) where.category_id = category_id;
+    if (tag_id) where.tags = { some: { id: tag_id } };
     
     if (content_status === 'empty') {
        // Assuming 'empty' means content_en is just the placeholder from ensureNewsForLead
@@ -52,6 +56,10 @@ export async function registerNewsRoutes(
     const data = await prisma.news.findMany({
       where,
       orderBy: { news_date: 'desc' },
+      include: {
+        category: true,
+        tags: true
+      },
       take: limit,
       skip: offset
     });
@@ -61,7 +69,10 @@ export async function registerNewsRoutes(
 
   fastify.get('/news/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const news = await prisma.news.findUnique({ where: { id } });
+    const news = await prisma.news.findUnique({ 
+        where: { id },
+        include: { category: true, tags: true }
+    });
     if (!news) {
       return reply.notFound('News not found');
     }

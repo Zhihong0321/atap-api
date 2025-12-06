@@ -4,6 +4,7 @@ type CreateTaskInput = {
   query: string;
   account_name?: string | null;
   collection_uuid?: string | null;
+  category_id?: string | null;
 };
 
 type HeadlineResult = {
@@ -37,6 +38,7 @@ export async function createNewsTask(input: CreateTaskInput) {
       query: input.query,
       account_name: input.account_name ?? null,
       collection_uuid: input.collection_uuid ?? NEW_SEARCHER_COLLECTION_UUID,
+      category_id: input.category_id ?? null,
       status: 'pending'
     }
   });
@@ -108,7 +110,7 @@ export async function fetchHeadlinesFromNewsSearcher(taskId: string, query: stri
   }
 }
 
-async function ensureNewsForLead(leadId: string, headline: HeadlineResult) {
+async function ensureNewsForLead(leadId: string, headline: HeadlineResult, categoryId?: string | null) {
   // For now, create a News row per headline with placeholder multilingual content.
   const placeholderContent = `Pending rewrite for: ${headline.title}`;
   const sources = [
@@ -128,6 +130,7 @@ async function ensureNewsForLead(leadId: string, headline: HeadlineResult) {
       content_my: placeholderContent,
       news_date: headline.published_at ? new Date(headline.published_at) : new Date(),
       sources,
+      category_id: categoryId ?? null,
       is_published: false,
       is_highlight: false
     }
@@ -189,7 +192,7 @@ export async function runNewsTask(taskId: string) {
     const news = [];
     for (const lead of leads) {
       const headline = headlines.find((h) => h.title === lead.headline) as HeadlineResult;
-      const created = await ensureNewsForLead(lead.id, headline);
+      const created = await ensureNewsForLead(lead.id, headline, task.category_id);
       news.push(created);
     }
 

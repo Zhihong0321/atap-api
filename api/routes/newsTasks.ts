@@ -7,13 +7,15 @@ import { prisma } from '../prisma.js';
 const createTaskSchema = z.object({
   query: z.string().trim().min(3),
   account_name: z.string().trim().optional(),
-  collection_uuid: z.string().trim().optional()
+  collection_uuid: z.string().trim().optional(),
+  category_id: z.string().uuid().optional() // New field
 });
 
 const updateTaskSchema = z.object({
   query: z.string().trim().min(3).optional(),
   account_name: z.string().trim().optional(),
-  collection_uuid: z.string().trim().optional()
+  collection_uuid: z.string().trim().optional(),
+  category_id: z.string().uuid().optional() // New field
 });
 
 export async function registerNewsTaskRoutes(

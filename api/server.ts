@@ -8,6 +8,7 @@ import { apiConfig } from './config.js';
 import { registerNewsRoutes } from './routes/news.js';
 import { registerNewsTaskRoutes } from './routes/newsTasks.js';
 import { registerNewsLeadRoutes } from './routes/newsLeads.js';
+import { registerCategoryRoutes } from './routes/categories.js';
 import { prisma } from './prisma.js';
 
 async function buildServer() {
@@ -127,13 +128,44 @@ async function buildServer() {
         <pre><code>POST /news-leads/process-rewrites</code></pre>
         <p>Processes up to 10 pending leads per call. Call repeatedly until queue is empty.</p>
 
-        <h2>2. News Management</h2>
+        <h2>2. Category Management</h2>
+        
+        <h3>List Categories</h3>
+        <pre><code>GET /categories</code></pre>
+
+        <h3>Create Category</h3>
+        <pre><code>POST /categories
+{
+  "name": "Solar"
+}</code></pre>
+
+        <h3>Update Category</h3>
+        <pre><code>PUT /categories/:id
+{
+  "name": "Updated Name"
+}</code></pre>
+
+        <h3>Delete Category</h3>
+        <pre><code>DELETE /categories/:id</code></pre>
+
+        <h3>Create Tag (under Category)</h3>
+        <pre><code>POST /categories/:id/tags
+{
+  "name": "PV Modules"
+}</code></pre>
+
+        <h3>Delete Tag</h3>
+        <pre><code>DELETE /tags/:id</code></pre>
+
+        <h2>3. News Management</h2>
 
         <h3>List News (Public / Admin Filter)</h3>
-        <pre><code>GET /news?limit=20&offset=0&published=true&content_status=empty</code></pre>
+        <pre><code>GET /news?limit=20&offset=0&published=true&content_status=empty&category_id=...&tag_id=...</code></pre>
         <ul>
             <li><code>content_status=empty</code>: Headlines only (Pending rewrite)</li>
             <li><code>content_status=filled</code>: Full content available</li>
+            <li><code>category_id</code>: Filter by Category UUID</li>
+            <li><code>tag_id</code>: Filter by Tag UUID</li>
         </ul>
 
         <h3>Update News (Admin)</h3>
@@ -161,6 +193,7 @@ async function buildServer() {
   await app.register(registerNewsRoutes as any, { prefix: '/api/v1' });
   await app.register(registerNewsTaskRoutes as any, { prefix: '/api/v1' });
   await app.register(registerNewsLeadRoutes as any, { prefix: '/api/v1' });
+  await app.register(registerCategoryRoutes as any, { prefix: '/api/v1' });
 
   app.addHook('onClose', async () => {
     await prisma.$disconnect();

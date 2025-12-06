@@ -22,6 +22,7 @@ type RewriterResponse = {
     zh_cn?: LanguageContent;
     ms_my?: LanguageContent;
   };
+  tags?: string[];
   source_urls?: string[];
 };
 
@@ -32,9 +33,9 @@ type LanguageContent = {
   background_context?: string;
 };
 
-async function callRewriterApi(headline: string): Promise<RewriterResponse> {
+async function callRewriterApi(query: string): Promise<RewriterResponse> {
   const url = new URL(PERPLEXITY_API_URL);
-  url.searchParams.append('q', headline);
+  url.searchParams.append('q', query);
   url.searchParams.append('account_name', ACCOUNT_NAME);
   url.searchParams.append('collection_uuid', REWRITER_COLLECTION_UUID);
   url.searchParams.append('mode', 'auto');
@@ -83,18 +84,45 @@ export async function processRewriteQueue() {
   const leads = await prisma.newsLead.findMany({
     where: { status: 'rewrite_pending' },
     take: 10, // Process in batches of 10 to avoid long running request
-    include: { news: true }
+    include: { 
+      news: {
+        include: {
+          category: {
+            include: { tags: true }
+          }
+        }
+      }
+    }
   });
 
   const results = [];
 
   for (const lead of leads) {
-    if (!lead.news_id) continue;
+    if (!lead.news_id || !lead.news) continue;
 
     try {
+      let query = lead.headline;
+      let availableTags: any[] = [];
+
+      // Construct prompt with tags if category exists
+      if (lead.news.category && lead.news.category.tags.length > 0) {
+        availableTags = lead.news.category.tags;
+        const tagNames = availableTags.map(t => t.name).join(', ');
+        query = `Headline: "${lead.headline}".\n\nTask: Rewrite this news and also select up to 3 most relevant tags from this list: [${tagNames}].\nOutput JSON with "tags" array included.`;
+      }
+
       // 2. Schedule API call with Rate Limiter
-      const result = await REWRITER_RATE_LIMITER.add(() => callRewriterApi(lead.headline));
+      const result = await REWRITER_RATE_LIMITER.add(() => callRewriterApi(query));
       
+      // Match returned tags with DB tags
+      const connectTags: { id: string }[] = [];
+      if (result.tags && Array.isArray(result.tags)) {
+        result.tags.forEach(tagName => {
+           const found = availableTags.find(t => t.name.toLowerCase() === tagName.toLowerCase());
+           if (found) connectTags.push({ id: found.id });
+        });
+      }
+
       // 3. Update Database
       const updatedNews = await prisma.news.update({
         where: { id: lead.news_id },
@@ -104,6 +132,9 @@ export async function processRewriteQueue() {
           content_my: formatContent(result.data?.ms_my),
           image_url: result.meta?.image_url || null,
           sources: result.source_urls as any, // Save sources array
+          tags: {
+            connect: connectTags
+          }
         }
       });
 
@@ -112,7 +143,7 @@ export async function processRewriteQueue() {
         data: { status: 'rewritten' }
       });
 
-      results.push({ id: lead.id, status: 'success', title: lead.headline });
+      results.push({ id: lead.id, status: 'success', title: lead.headline, tags: connectTags.length });
       
     } catch (error: any) {
       console.error(`Failed to rewrite lead ${lead.id}:`, error);
