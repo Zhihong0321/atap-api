@@ -10,6 +10,7 @@ import { registerNewsTaskRoutes } from './routes/newsTasks.js';
 import { registerNewsLeadRoutes } from './routes/newsLeads.js';
 import { registerCategoryRoutes } from './routes/categories.js';
 import { registerCalendarRoutes } from './routes/calendar.js';
+import { registerSchedulerRoutes } from './routes/scheduler.js';
 import { prisma } from './prisma.js';
 import { requireAdmin } from './auth.js';
 
@@ -206,6 +207,7 @@ async function buildServer() {
   await app.register(registerNewsLeadRoutes as any, { prefix: '/api/v1' });
   await app.register(registerCategoryRoutes as any, { prefix: '/api/v1' });
   await app.register(registerCalendarRoutes as any, { prefix: '/api/v1' });
+  await app.register(registerSchedulerRoutes as any, { prefix: '/api/v1' });
 
   app.addHook('onClose', async () => {
     await prisma.$disconnect();
