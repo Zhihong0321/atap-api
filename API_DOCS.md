@@ -256,3 +256,34 @@ All Admin endpoints require the `Authorization` header (Bearer Token).
     "success": true
   }
   ```
+
+---
+
+## 5. Scheduler & Automation
+
+### Run Pending Tasks (Cron Endpoint)
+**POST** `/scheduler/run-pending-tasks`
+
+- **Description**: Checks for overdue scheduled searches and triggers them. This endpoint is designed to be called by an external cron job (e.g., Railway Cron).
+- **Recommended Cron Schedule**: Every 6 hours.
+- **URL for Cron Job**: `https://atap-api-production.up.railway.app/api/v1/scheduler/run-pending-tasks`
+- **Response (Success)**:
+  ```json
+  {
+    "message": "Tasks executed",
+    "results": [
+      {
+        "topic": "Solar Malaysia",
+        "status": "triggered",
+        "result": { "itemsFound": 5, "itemsProcessed": 2 }
+      }
+    ]
+  }
+  ```
+- **Response (No Tasks)**:
+  ```json
+  {
+    "message": "No tasks pending",
+    "results": []
+  }
+  ```
