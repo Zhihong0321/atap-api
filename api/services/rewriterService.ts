@@ -51,25 +51,43 @@ async function callPerplexityApi(query: string, collection_uuid: string, account
   url.searchParams.append('sources', 'web');
   url.searchParams.append('answer_only', 'true');
 
-  const response = await fetch(url.toString(), { method: 'GET' });
+  console.log(`[Perplexity] Calling API (Collection: ${collection_uuid.slice(0, 8)}...)`);
   
-  if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Perplexity API error: ${response.status} ${text}`);
-  }
-
-  const raw = await response.json() as any;
-  
-  const answerStr = raw.answer || raw.data?.answer || '';
-  if (!answerStr) throw new Error('Empty answer from Perplexity');
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
 
   try {
-      const cleanJson = answerStr.replace(/```json/g, '').replace(/```/g, '').trim();
-      return JSON.parse(cleanJson);
-  } catch (e) {
-      throw new Error('Failed to parse Perplexity JSON response');
+    const response = await fetch(url.toString(), { 
+        method: 'GET',
+        signal: controller.signal 
+    });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Perplexity API error: ${response.status} ${text}`);
+    }
+
+    const raw = await response.json() as any;
+    
+    const answerStr = raw.answer || raw.data?.answer || '';
+    if (!answerStr) throw new Error('Empty answer from Perplexity');
+
+    try {
+        const cleanJson = answerStr.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(cleanJson);
+    } catch (e) {
+        throw new Error('Failed to parse Perplexity JSON response');
+    }
+  } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+          throw new Error('Perplexity API timed out after 60s');
+      }
+      throw error;
   }
 }
+
 
 async function callTranslatorApi(text: string, targetLanguage: 'zh_cn' | 'ms_my'): Promise<TranslatorResponse> {
   const languageMap = {
@@ -90,6 +108,7 @@ export async function processRewriteQueue() {
   const results = [];
 
   while (true) {
+    console.log('[Rewriter] Fetching next pending lead...');
     // Fetch one at a time to manage rate limits and allow breaking
     const leads = await prisma.newsLead.findMany({
       where: { status: 'rewrite_pending' },
@@ -106,12 +125,15 @@ export async function processRewriteQueue() {
     });
 
     if (leads.length === 0) {
+      console.log('[Rewriter] No more pending leads. Queue empty.');
       break; // Queue is empty
     }
 
     const lead = leads[0];
+    console.log(`[Rewriter] Processing Lead ID: ${lead.id} (Headline: "${lead.headline.substring(0, 30)}...")`);
+
     if (!lead.news_id || !lead.news) {
-        // Skip malformed lead (prevent infinite loop)
+        console.error('[Rewriter] Malformed lead (missing news link). Marking as error.');
         await prisma.newsLead.update({ where: { id: lead.id }, data: { status: 'error' } });
         continue;
     }
@@ -123,19 +145,29 @@ export async function processRewriteQueue() {
 
       const prompt = buildRewritePrompt(lead.headline, categoryInfo);
 
+      console.log('[Rewriter] Calling Rewriter API...');
       const result = await REWRITER_RATE_LIMITER.add(() => callPerplexityApi(prompt, REWRITER_COLLECTION_UUID));
       
       const title_en = result.meta?.headline_query ?? lead.news.title_en;
       const content_en = result.article_en_html ?? lead.news.content_en;
+      console.log('[Rewriter] Rewrite complete. Starting translations...');
 
       // Translate title and content
+      console.log('[Rewriter] Translating Title (CN)...');
       const title_cn = (await REWRITER_RATE_LIMITER.add(() => callTranslatorApi(title_en, 'zh_cn')))?.translation ?? title_en;
+      
+      console.log('[Rewriter] Translating Title (MY)...');
       const title_my = (await REWRITER_RATE_LIMITER.add(() => callTranslatorApi(title_en, 'ms_my')))?.translation ?? title_en;
+      
+      console.log('[Rewriter] Translating Content (CN)...');
       const content_cn = (await REWRITER_RATE_LIMITER.add(() => callTranslatorApi(content_en, 'zh_cn')))?.translation ?? content_en;
+      
+      console.log('[Rewriter] Translating Content (MY)...');
       const content_my = (await REWRITER_RATE_LIMITER.add(() => callTranslatorApi(content_en, 'ms_my')))?.translation ?? content_en;
       
       const sourcesArray = Array.isArray(result.source_urls) ? result.source_urls : [];
 
+      console.log('[Rewriter] Updating Database...');
       const updatedNews = await prisma.news.update({
         where: { id: lead.news_id },
         data: {
@@ -156,11 +188,12 @@ export async function processRewriteQueue() {
         data: { status: 'rewritten' }
       });
 
+      console.log(`[Rewriter] Success: Lead ${lead.id}`);
       results.push({ id: lead.id, status: 'success', title: lead.headline });
       totalProcessed++;
       
     } catch (error: any) {
-      console.error(`Failed to rewrite lead ${lead.id}:`, error);
+      console.error(`[Rewriter] Failed to rewrite lead ${lead.id}:`, error);
       await prisma.newsLead.update({
         where: { id: lead.id },
         data: { status: 'error' }
