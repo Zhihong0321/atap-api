@@ -71,9 +71,6 @@ async function callPerplexityApi(query: string, collection_uuid: string): Promis
 }
 
 async function callTranslatorApi(text: string, targetLanguage: 'zh_cn' | 'ms_my'): Promise<TranslatorResponse> {
-  if (TRANSLATOR_COLLECTION_UUID === 'YOUR_TRANSLATOR_COLLECTION_UUID_HERE') {
-    throw new Error('TRANSLATOR_COLLECTION_UUID is not configured. Please update rewriterService.ts');
-  }
   const languageMap = {
     zh_cn: 'Chinese (Simplified)',
     ms_my: 'Malay'
