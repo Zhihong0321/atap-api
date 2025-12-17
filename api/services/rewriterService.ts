@@ -87,7 +87,7 @@ async function callTranslatorApi(text: string, targetLanguage: 'zh_cn' | 'ms_my'
 export async function processRewriteQueue() {
   const leads = await prisma.newsLead.findMany({
     where: { status: 'rewrite_pending' },
-    take: 10,
+    take: 1,
     include: { 
       news: {
         include: {

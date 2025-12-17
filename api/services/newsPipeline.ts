@@ -1,4 +1,5 @@
 import { prisma } from '../prisma.js';
+import { processRewriteQueue } from './rewriterService.js';
 
 type CreateTaskInput = {
   query: string;
@@ -197,6 +198,9 @@ export async function runNewsTask(taskId: string) {
     }
 
     await prisma.newsTask.update({ where: { id: taskId }, data: { status: 'completed' } });
+
+    // Automatically trigger rewrite queue processing in the background
+    processRewriteQueue().catch(err => console.error('[AutoRewrite] Failed to trigger background process:', err));
 
     return { taskId, leads, news };
   } catch (err: any) {
