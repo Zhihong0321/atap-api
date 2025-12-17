@@ -42,62 +42,130 @@ ${categorySection}
 `;
 }
 
-async function callPerplexityApi(query: string, collection_uuid: string, account_name_override?: string): Promise<any> {
+async function callPerplexityApi(query: string, collection_uuid: string, account_name_override?: string, expectJson: boolean = true): Promise<any> {
+
   const url = new URL(PERPLEXITY_API_URL);
+
   url.searchParams.append('q', query);
+
   url.searchParams.append('account_name', account_name_override || ACCOUNT_NAME);
+
   url.searchParams.append('collection_uuid', collection_uuid);
+
   url.searchParams.append('mode', 'auto');
+
   url.searchParams.append('sources', 'web');
+
   url.searchParams.append('answer_only', 'true');
 
+
+
   console.log(`[Perplexity] Calling API (Collection: ${collection_uuid.slice(0, 8)}...)`);
+
   
+
   const controller = new AbortController();
+
   const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
 
+
+
   try {
+
     const response = await fetch(url.toString(), { 
+
         method: 'GET',
+
         signal: controller.signal 
+
     });
+
     clearTimeout(timeoutId);
+
     
+
     if (!response.ok) {
+
         const text = await response.text();
+
         throw new Error(`Perplexity API error: ${response.status} ${text}`);
+
     }
+
+
 
     const raw = await response.json() as any;
+
     
+
     const answerStr = raw.answer || raw.data?.answer || '';
+
     if (!answerStr) throw new Error('Empty answer from Perplexity');
 
-    try {
-        const cleanJson = answerStr.replace(/```json/g, '').replace(/```/g, '').trim();
-        return JSON.parse(cleanJson);
-    } catch (e) {
-        throw new Error('Failed to parse Perplexity JSON response');
+
+
+    if (!expectJson) {
+
+        return { answer: answerStr };
+
     }
+
+
+
+    try {
+
+        const cleanJson = answerStr.replace(/```json/g, '').replace(/```/g, '').trim();
+
+        return JSON.parse(cleanJson);
+
+    } catch (e) {
+
+        // If we expected JSON but failed, log it
+
+        console.error('[Perplexity] JSON Parse Error. Raw output:', answerStr.substring(0, 100) + '...');
+
+        throw new Error('Failed to parse Perplexity JSON response');
+
+    }
+
   } catch (error: any) {
+
       clearTimeout(timeoutId);
+
       if (error.name === 'AbortError') {
+
           throw new Error('Perplexity API timed out after 60s');
+
       }
+
       throw error;
+
   }
+
 }
 
 
+
 async function callTranslatorApi(text: string, targetLanguage: 'zh_cn' | 'ms_my'): Promise<TranslatorResponse> {
+
   const languageMap = {
+
     zh_cn: 'Chinese (Simplified)',
+
     ms_my: 'Malay'
+
   };
+
   const prompt = `Translate the following English text to ${languageMap[targetLanguage]} and return ONLY the translated text. No markdown, no extra sentences, just the translation.\n\nEnglish Text:\n${text}`;
 
-  const result = await callPerplexityApi(prompt, TRANSLATOR_COLLECTION_UUID, TRANSLATOR_ACCOUNT_NAME);
-  return { translation: result.translation || result.answer || String(result) };
+
+
+  // Pass expectJson = false
+
+  const result = await callPerplexityApi(prompt, TRANSLATOR_COLLECTION_UUID, TRANSLATOR_ACCOUNT_NAME, false);
+
+  return { translation: result.answer };
+
 }
 
 
