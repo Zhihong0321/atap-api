@@ -1,7 +1,7 @@
 import { prisma } from '../prisma.js';
 import { randomUUID } from 'crypto';
+import { queryPerplexity } from '../utils/perplexityClient.js';
 
-const PERPLEXITY_API_URL = 'https://ee-perplexity-wrapper-production.up.railway.app/api/query_sync';
 const ACCOUNT_NAME = 'zhihong0321@gmail'; 
 
 interface HeadlineResult {
@@ -33,13 +33,6 @@ export async function runAutomatedNewsCycle(topic: string, intervalHours: number
     // 1. Construct Query
     const query = `Find news about "${topic}" published after ${dateAfter}. Return ONLY a JSON array of objects with "title", "url", "source", and "date" (YYYY-MM-DD format). Do not include any other text. Ensure sources are distinct.`;
 
-    const url = new URL(PERPLEXITY_API_URL);
-    url.searchParams.append('q', query);
-    url.searchParams.append('account_name', ACCOUNT_NAME);
-    url.searchParams.append('mode', 'auto');
-    url.searchParams.append('sources', 'web');
-    url.searchParams.append('answer_only', 'true');
-
     let rawResponse: any = null;
     let itemsFound = 0;
     let itemsProcessed = 0;
@@ -47,39 +40,26 @@ export async function runAutomatedNewsCycle(topic: string, intervalHours: number
     let errorMessage: string | null = null;
 
     try {
-        // 2. Fetch from Perplexity
-        const response = await fetch(url.toString(), {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' }
+        // 2. Fetch from Perplexity (Async Queue)
+        const headlines = await queryPerplexity(query, {
+            account_name: ACCOUNT_NAME,
+            mode: 'auto',
+            expectJson: true
         });
 
-        if (!response.ok) {
-            const text = await response.text();
-            throw new Error(`Perplexity API error: ${response.status} ${text}`);
-        }
+        rawResponse = headlines; // Log the parsed result
 
-        const data = await response.json() as any;
-        rawResponse = data; // Keep the full wrapper response
+        if (!Array.isArray(headlines)) {
+             console.warn('[NewsAuto] Perplexity response is not an array:', headlines);
+             // Proceed with empty list or throw? Existing logic tried to continue.
+             // If expectJson=true and it returns non-array, likely issue.
+        }
         
-        const answerText = data.answer || data.data?.answer || '';
-
-        // Extract JSON
-        const jsonMatch = answerText.match(/```json\s*([\s\S]*?)\s*```/) || answerText.match(/```\s*([\s\S]*?)\s*```/);
-        const jsonString = jsonMatch ? jsonMatch[1] : answerText;
-
-        let headlines: HeadlineResult[] = [];
-        try {
-            headlines = JSON.parse(jsonString);
-            if (!Array.isArray(headlines)) headlines = [];
-        } catch (e) {
-            console.warn('[NewsAuto] JSON Parse failed, trying to process empty list');
-        }
-
-        itemsFound = headlines.length;
+        const safeHeadlines = Array.isArray(headlines) ? headlines : [];
+        itemsFound = safeHeadlines.length;
         status = 'RAW_FETCHED';
 
         // 3. Log Raw Response (Immediately)
-        // Using raw SQL because 'search_logs' is not in Prisma Client
         await prisma.$executeRaw`
             INSERT INTO "search_logs" ("id", "execution_time", "topic_searched", "time_span_used", "raw_response", "items_found", "items_processed", "status", "error_message")
             VALUES (${logId}::uuid, ${executionTime}, ${topic}, ${timeSpanUsed}, ${JSON.stringify(rawResponse)}::jsonb, ${itemsFound}, 0, ${status}, NULL)
@@ -87,19 +67,9 @@ export async function runAutomatedNewsCycle(topic: string, intervalHours: number
 
         // 4. Deduplication
         const uniqueHeadlines: HeadlineResult[] = [];
-        for (const h of headlines) {
+        for (const h of safeHeadlines) {
             if (!h.url) continue;
 
-            // Check if URL exists in News table (using Prisma Client normally as News exists)
-            // Or use raw query if we want to be safe, but News is in schema.
-            // Using standard Prisma count for safety and ease.
-            // Note: Check against sources array in JSON? Or exact match?
-            // Existing pipeline checks exact match in 'sources'.
-            // Simpler: Check if any news has this URL in its source.
-            // Since sources is Json, we use raw query for robust check or simple string contains if simple.
-            // Let's stick to the user's plan: "Strict URL Check".
-            
-            // We'll assume strict check against any record in DB that might have this URL.
             // Efficient check:
             const exists = await prisma.news.findFirst({
                 where: {
@@ -108,7 +78,6 @@ export async function runAutomatedNewsCycle(topic: string, intervalHours: number
                     }
                 }
             });
-            // Note: array_contains might depend on Prisma version/Postgres. 
             // Fallback: Use raw query to check existence.
              const existsRaw = await prisma.$queryRaw`
                 SELECT id FROM "News", jsonb_array_elements(sources) as src
@@ -122,8 +91,6 @@ export async function runAutomatedNewsCycle(topic: string, intervalHours: number
         }
 
         // 5. Process Unique Items (Create NewsLeads)
-        // We need a dummy Task ID to attach these leads to, OR we create a "System Task".
-        // For now, we'll create a transient NewsTask for this automated run so we can track them in the existing UI too.
         const task = await prisma.newsTask.create({
             data: {
                 query: `[AUTO] ${topic}`,

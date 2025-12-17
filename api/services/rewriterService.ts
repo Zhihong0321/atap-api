@@ -1,5 +1,6 @@
 import { prisma } from '../prisma.js';
 import { RateLimiter } from '../utils/rateLimiter.js';
+import { queryPerplexity } from '../utils/perplexityClient.js';
 
 // Configuration
 // 3 seconds interval = 20 calls/min max. 
@@ -9,7 +10,6 @@ import { RateLimiter } from '../utils/rateLimiter.js';
 // I will use 4000ms (4s) to satisfy the stricter "15 per min" constraint safely.
 const REWRITER_RATE_LIMITER = new RateLimiter(4000); 
 
-const PERPLEXITY_API_URL = 'https://ee-perplexity-wrapper-production.up.railway.app/api/query_sync';
 const REWRITER_COLLECTION_UUID = '6b8829ad-4c17-4a45-ac67-db3b017c2be6';
 const TRANSLATOR_COLLECTION_UUID = 'f3a307b0-d3b8-409a-9c73-39319bfd6b02';
 const ACCOUNT_NAME = 'zhihong0321@gmail'; // Account for Rewriter
@@ -35,7 +35,7 @@ function buildRewritePrompt(headline: string, categoryInfo?: {name?: string}) { 
     ? `The primary topic sector is ${categoryInfo.name}.`
     : '';
 
-  return `Executive Intelligence Analyst (Green-Tech & Mobility) Role: You are a Senior Intelligence Analyst. You synthesize complex developments in Renewable Energy (Solar/Wind/Storage), Electric Mobility (EV/Battery), and Energy Policy into long-form, boardroom-ready intelligence briefings. Input: News Headline (string) Date (string) Mission: Conduct a deep-dive investigation. Avoid generic summaries. You must provide Strategic Synthesis: connecting the news to supply chains, capital flows, and regulatory frameworks. ======================== PHASE 1 — CROSS-SECTOR RESEARCH Fact-Checking: Verify technical and financial details via 3+ reputable sources. VIP Commentary: Identify a specific quote or stated position from a high-level stakeholder (e.g., Minister, CEO, or Lead Analyst). Market Tracking: Analyze the news from a Stock Investor's POV. Look for impacts on listed companies, orderbook replenishment, or sector-wide re-rating catalysts. ======================== PHASE 2 — THE INTELLIGENCE BRIEFING (HTML) Construct a deep-form HTML article. Use <br><br> for spacing between major sections. <b>Context & Catalyst:</b> <p>4–6 sentences explaining the immediate triggers. Why is this happening on this specific date?</p> <b>Executive Summary (BLUF):</b> <ul> <li><b>Core Development:</b> The "what" and "how much" (scale/magnitude).</li> <li><b>Disruption Quotient:</b> How this shifts the status quo.</li> <li><b>Strategic Takeaway:</b> The single most important implication for long-term strategy.</li> </ul> <b>Strategic Analysis:</b> <p><b>Impact & Techno-Economic Shift:</b> 6–8 sentences on consequences for the supply chain, grid, or technical standards.</p> <p><b>Stakeholder Dynamics:</b> 4–6 sentences identifying the winners and losers.</p> <b>Investor Sentiment & Market Trend:</b> <p><b>POV - Stock Market Perspective:</b> 5–8 sentences analyzing how this news moves the trend. Identify which listed counters or sectors are likely to see price volatility. Analyze if this news is a "Buy the News" event, an "Accumulation Window," or a signal of "Execution Risk." Connect the news to broader market cycles (e.g., ESG fund inflows, interest rate sensitivity, or sector-wide re-rating).</p> <b>Expert Validation & Commentary:</b> <p>A professional perspective including a relevant quote wrapped in the following tag:</p> <blockquote> "Insert the direct or paraphrased quote from the Minister, CEO, or Analyst here." </blockquote> <p>Follow with 2–3 sentences of analysis on why this viewpoint matters.</p> <b>Forecast & Risk Assessment:</b> <p><b>Short-term (0–6m):</b> Immediate market reactions or initial pilot results.</p> <p><b>Medium-term (6–24m):</b> Structural changes to the ecosystem and mass-adoption signals.</p> <b>Policy & Historical Anchor:</b> <p>6–10 sentences of deep context. Reference specific historical precedents (e.g., IRA, EU Green Deal, Malaysia's NETR).</p> ======================== PHASE 3 — JSON OUTPUT (STRICT) Return ONLY a valid JSON object.
+  return `Executive Intelligence Analyst (Green-Tech & Mobility) Role: You are a Senior Intelligence Analyst. You synthesize complex developments in Renewable Energy (Solar/Wind/Storage), Electric Mobility (EV/Battery), and Energy Policy into long-form, boardroom-ready intelligence briefings. Input: News Headline (string) Date (string) Mission: Conduct a deep-dive investigation. Avoid generic summaries. You must provide Strategic Synthesis: connecting the news to supply chains, capital flows, and regulatory frameworks. ======================== PHASE 1 — CROSS-SECTOR RESEARCH Fact-Checking: Verify technical and financial details via 3+ reputable sources. VIP Commentary: Identify a specific quote or stated position from a high-level stakeholder (e.g., Minister, CEO, or Lead Analyst). Market Tracking: Analyze the news from a Stock Investor's POV. Look for impacts on listed companies, orderbook replenishment, or sector-wide re-rating catalysts. ======================== PHASE 2 — THE INTELLIGENCE BRIEFING (HTML) Construct a deep-form HTML article. Use <br><br> for spacing between major sections. <b>Context & Catalyst:</b> <p>4–6 sentences explaining the immediate triggers. Why is this happening on this specific date?</p> <b>Executive Summary (BLUF):</b> <ul> <li><b>Core Development:</b> The "what" and "how much" (scale/magnitude).</li> <li><b>Disruption Quotient:</b> How this shifts the status quo.</li> <li><b>Strategic Takeaway:</b> The single most important implication for long-term strategy.</li> </ul> <b>Strategic Analysis:</b> <p><b>Impact & Techno-Economic Shift:</b> 6–8 sentences on consequences for the supply chain, grid, or technical standards.</p> <p><b>Stakeholder Dynamics:</b> 4–6 sentences identifying the winners and losers.</p> <b>Investor Sentiment & Market Trend:</b> <p><b>POV - Stock Market Perspective:</b> 5–8 sentences analyzing how this news moves the trend. Identify which listed counters or sectors are likely to see price volatility. Analyze if this ... [truncated]
 ${categorySection}
 { "meta": { "headline_query": "${headline}", "topic_sector": "Renewable | EV | Battery | Policy", "date_query": "${new Date().toISOString().split('T')[0]}", "generated_utc": "${new Date().toISOString()}" }, "article_en_html": "String (JSON-escaped HTML)", "source_urls": ["URL 1", "URL 2", "URL 3"] }
 
@@ -43,105 +43,18 @@ ${categorySection}
 }
 
 async function callPerplexityApi(query: string, collection_uuid: string, account_name_override?: string, expectJson: boolean = true): Promise<any> {
-
-  const url = new URL(PERPLEXITY_API_URL);
-
-  url.searchParams.append('q', query);
-
-  url.searchParams.append('account_name', account_name_override || ACCOUNT_NAME);
-
-  url.searchParams.append('collection_uuid', collection_uuid);
-
-  url.searchParams.append('mode', 'auto');
-
-  url.searchParams.append('sources', 'web');
-
-  url.searchParams.append('answer_only', 'true');
-
-
-
-  console.log(`[Perplexity] Calling API (Collection: ${collection_uuid.slice(0, 8)}...)`);
-
-  
-
-  const controller = new AbortController();
-
-  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
-
-
-
+  // Map to new client
   try {
-
-    const response = await fetch(url.toString(), { 
-
-        method: 'GET',
-
-        signal: controller.signal 
-
-    });
-
-    clearTimeout(timeoutId);
-
-    
-
-    if (!response.ok) {
-
-        const text = await response.text();
-
-        throw new Error(`Perplexity API error: ${response.status} ${text}`);
-
-    }
-
-
-
-    const raw = await response.json() as any;
-
-    
-
-    const answerStr = raw.answer || raw.data?.answer || '';
-
-    if (!answerStr) throw new Error('Empty answer from Perplexity');
-
-
-
-    if (!expectJson) {
-
-        return { answer: answerStr };
-
-    }
-
-
-
-    try {
-
-        const cleanJson = answerStr.replace(/```json/g, '').replace(/```/g, '').trim();
-
-        return JSON.parse(cleanJson);
-
-    } catch (e) {
-
-        // If we expected JSON but failed, log it
-
-        console.error('[Perplexity] JSON Parse Error. Raw output:', answerStr.substring(0, 100) + '...');
-
-        throw new Error('Failed to parse Perplexity JSON response');
-
-    }
-
-  } catch (error: any) {
-
-      clearTimeout(timeoutId);
-
-      if (error.name === 'AbortError') {
-
-          throw new Error('Perplexity API timed out after 60s');
-
-      }
-
-      throw error;
-
+      return await queryPerplexity(query, {
+          account_name: account_name_override || ACCOUNT_NAME,
+          collection_uuid: collection_uuid,
+          expectJson: expectJson,
+          mode: 'auto'
+      });
+  } catch (err: any) {
+      console.error('[Rewriter] Perplexity API Error:', err);
+      throw err;
   }
-
 }
 
 

@@ -45,52 +45,20 @@ export async function createNewsTask(input: CreateTaskInput) {
   });
 }
 
+import { queryPerplexity } from '../utils/perplexityClient.js';
+
 export async function fetchHeadlinesFromNewsSearcher(taskId: string, query: string, collectionUuid?: string | null): Promise<HeadlineResult[]> {
-  const PERPLEXITY_API_URL = 'https://ee-perplexity-wrapper-production.up.railway.app/api/query_sync';
-  const accountName = 'zhihong0321@gmail'; // Updated to use valid account
+  const accountName = 'zhihong0321@gmail'; 
 
-  const url = new URL(PERPLEXITY_API_URL);
-  url.searchParams.append('q', `Find news headlines for: ${query}. Return ONLY a JSON array of objects with "title", "url", "source", and "date" (YYYY-MM-DD format). Do not include any other text.`);
-  url.searchParams.append('account_name', accountName);
-  url.searchParams.append('mode', 'auto'); // Changed from research to auto to fix 500 error
-  url.searchParams.append('sources', 'web');
-  url.searchParams.append('answer_only', 'true');
-
-  if (collectionUuid) {
-    url.searchParams.append('collection_uuid', collectionUuid);
-  }
+  const prompt = `Find news headlines for: ${query}. Return ONLY a JSON array of objects with "title", "url", "source", and "date" (YYYY-MM-DD format). Do not include any other text.`;
 
   try {
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json'
-      }
+    const parsed = await queryPerplexity(prompt, {
+      account_name: accountName,
+      mode: 'auto', // Changed to auto as per previous fix
+      collection_uuid: collectionUuid ?? undefined,
+      expectJson: true
     });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Perplexity API error: ${response.status} ${text}`);
-    }
-
-    const data = await response.json() as any;
-    const answerText = data.answer || data.data?.answer || '';
-
-
-    // Attempt to parse JSON from the answer text
-    // The LLM might wrap it in markdown code blocks ```json ... ```
-    const jsonMatch = answerText.match(/```json\s*([\s\S]*?)\s*```/) || answerText.match(/```\s*([\s\S]*?)\s*```/);
-    const jsonString = jsonMatch ? jsonMatch[1] : answerText;
-
-    let parsed: any[] = [];
-    try {
-      parsed = JSON.parse(jsonString);
-    } catch (e) {
-      console.error('Failed to parse JSON from Perplexity response:', answerText);
-      // Fallback: empty list or try to extract lines?
-      // For now, empty list to avoid garbage data
-      return []; 
-    }
 
     if (!Array.isArray(parsed)) {
       console.warn('Perplexity response is not an array:', parsed);
