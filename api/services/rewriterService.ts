@@ -11,91 +11,41 @@ const REWRITER_RATE_LIMITER = new RateLimiter(4000);
 
 const PERPLEXITY_API_URL = 'https://ee-perplexity-wrapper-production.up.railway.app/api/query_sync';
 const REWRITER_COLLECTION_UUID = '6b8829ad-4c17-4a45-ac67-db3b017c2be6';
+const TRANSLATOR_COLLECTION_UUID = '78b9766b-fbd4-4a4a-9120-4c1396beb6de';
 const ACCOUNT_NAME = 'zhihong0321@gmail';
 
 type RewriterResponse = {
   meta?: {
     headline_query?: string;
+    topic_sector?: string;
     date_query?: string;
     generated_utc?: string;
-    image_url?: string;
   };
-  titles?: {
-    en?: string;
-    zh_cn?: string;
-    ms_my?: string;
-  };
-  article?: {
-    en_html?: string;
-    zh_cn_html?: string;
-    ms_my_html?: string;
-  };
-  data?: {
-    en?: LanguageContent;
-    zh_cn?: LanguageContent;
-    ms_my?: LanguageContent;
-  };
-  tags?: string[];
+  article_en_html?: string;
   source_urls?: string[];
 };
 
-type LanguageContent = {
-  context_warming?: string;
-  main_points?: string[];
-  analysis?: Record<string, any>;
-  background_context?: string;
+type TranslatorResponse = {
+  translation?: string;
 };
 
-function buildRewritePrompt(headline: string, tagNames?: string[], categoryInfo?: {name?: string, description?: string}) {
-  const tagSection = tagNames && tagNames.length
-    ? `Select up to 3 tags strictly from this list: [${tagNames.join(', ')}] and return them as a "tags" array.`
-    : 'If no tags list is provided, return an empty "tags" array.';
-    
+function buildRewritePrompt(headline: string, categoryInfo?: {name?: string}) { // Removed tagNames as not in new prompt
   const categorySection = categoryInfo 
-    ? `Category context: ${categoryInfo.name}${categoryInfo.description ? ` - ${categoryInfo.description}` : ''}.`
+    ? `The primary topic sector is ${categoryInfo.name}.`
     : '';
 
-  return `Rewrite the following news headline into structured JSON.
-
-Headline: "${headline}"
+  return `Executive Intelligence Analyst (Green-Tech & Mobility) Role: You are a Senior Intelligence Analyst. You synthesize complex developments in Renewable Energy (Solar/Wind/Storage), Electric Mobility (EV/Battery), and Energy Policy into long-form, boardroom-ready intelligence briefings. Input: News Headline (string) Date (string) Mission: Conduct a deep-dive investigation. Avoid generic summaries. You must provide Strategic Synthesis: connecting the news to supply chains, capital flows, and regulatory frameworks. ======================== PHASE 1 — CROSS-SECTOR RESEARCH Fact-Checking: Verify technical and financial details via 3+ reputable sources. VIP Commentary: Identify a specific quote or stated position from a high-level stakeholder (e.g., Minister, CEO, or Lead Analyst). Market Tracking: Analyze the news from a Stock Investor's POV. Look for impacts on listed companies, orderbook replenishment, or sector-wide re-rating catalysts. ======================== PHASE 2 — THE INTELLIGENCE BRIEFING (HTML) Construct a deep-form HTML article. Use <br><br> for spacing between major sections. <b>Context & Catalyst:</b> <p>4–6 sentences explaining the immediate triggers. Why is this happening on this specific date?</p> <b>Executive Summary (BLUF):</b> <ul> <li><b>Core Development:</b> The "what" and "how much" (scale/magnitude).</li> <li><b>Disruption Quotient:</b> How this shifts the status quo.</li> <li><b>Strategic Takeaway:</b> The single most important implication for long-term strategy.</li> </ul> <b>Strategic Analysis:</b> <p><b>Impact & Techno-Economic Shift:</b> 6–8 sentences on consequences for the supply chain, grid, or technical standards.</p> <p><b>Stakeholder Dynamics:</b> 4–6 sentences identifying the winners and losers.</p> <b>Investor Sentiment & Market Trend:</b> <p><b>POV - Stock Market Perspective:</b> 5–8 sentences analyzing how this news moves the trend. Identify which listed counters or sectors are likely to see price volatility. Analyze if this news is a "Buy the News" event, an "Accumulation Window," or a signal of "Execution Risk." Connect the news to broader market cycles (e.g., ESG fund inflows, interest rate sensitivity, or sector-wide re-rating).</p> <b>Expert Validation & Commentary:</b> <p>A professional perspective including a relevant quote wrapped in the following tag:</p> <blockquote> "Insert the direct or paraphrased quote from the Minister, CEO, or Analyst here." </blockquote> <p>Follow with 2–3 sentences of analysis on why this viewpoint matters.</p> <b>Forecast & Risk Assessment:</b> <p><b>Short-term (0–6m):</b> Immediate market reactions or initial pilot results.</p> <p><b>Medium-term (6–24m):</b> Structural changes to the ecosystem and mass-adoption signals.</p> <b>Policy & Historical Anchor:</b> <p>6–10 sentences of deep context. Reference specific historical precedents (e.g., IRA, EU Green Deal, Malaysia's NETR).</p> ======================== PHASE 3 — JSON OUTPUT (STRICT) Return ONLY a valid JSON object.
 ${categorySection}
+{ "meta": { "headline_query": "${headline}", "topic_sector": "Renewable | EV | Battery | Policy", "date_query": "${new Date().toISOString().split('T')[0]}", "generated_utc": "${new Date().toISOString()}" }, "article_en_html": "String (JSON-escaped HTML)", "source_urls": ["URL 1", "URL 2", "URL 3"] }
 
-Return ONLY valid JSON (no markdown fences) with this shape:
-{
-  "meta": {
-    "headline_query": string,
-    "date_query": string (YYYY-MM-DD if available, else today),
-    "generated_utc": string (ISO),
-    "image_url": string | null
-  },
-  "titles": {
-    "en": string,
-    "zh_cn": string,
-    "ms_my": string
-  },
-  "article": {
-    "en_html": string,
-    "zh_cn_html": string,
-    "ms_my_html": string
-  },
-  "tags": string[],
-  "source_urls": string[]
+`;
 }
 
-Content rules:
-- Provide concise, publish-ready HTML paragraphs and bullet lists in each language field.
-- Provide translated titles in each language in the "titles" field.
-- ${tagSection}
-- ${categorySection ? 'Tailor content to match the category context and theme.' : ''}
-- Do not include markdown code fences.
-- Keep output strictly valid JSON.`;
-}
-
-async function callRewriterApi(query: string): Promise<RewriterResponse> {
+async function callPerplexityApi(query: string, collection_uuid: string): Promise<any> {
   const url = new URL(PERPLEXITY_API_URL);
   url.searchParams.append('q', query);
   url.searchParams.append('account_name', ACCOUNT_NAME);
-  url.searchParams.append('collection_uuid', REWRITER_COLLECTION_UUID);
+  url.searchParams.append('collection_uuid', collection_uuid);
   url.searchParams.append('mode', 'auto');
   url.searchParams.append('sources', 'web');
   url.searchParams.append('answer_only', 'true');
@@ -109,44 +59,42 @@ async function callRewriterApi(query: string): Promise<RewriterResponse> {
 
   const raw = await response.json() as any;
   
-  // Extract answer from various possible locations
   const answerStr = raw.answer || raw.data?.answer || '';
   if (!answerStr) throw new Error('Empty answer from Perplexity');
 
   try {
-      // Clean markdown code blocks if present
       const cleanJson = answerStr.replace(/```json/g, '').replace(/```/g, '').trim();
       return JSON.parse(cleanJson);
   } catch (e) {
-      throw new Error('Failed to parse Rewriter JSON response');
+      throw new Error('Failed to parse Perplexity JSON response');
   }
 }
 
-function formatContent(content?: LanguageContent): string {
-    if (!content) return '';
-    
-    const points = content.main_points?.map(p => `<li>${p}</li>`).join('') || '';
-    const analysis = content.analysis ? JSON.stringify(content.analysis, null, 2) : ''; // Keep analysis simple for now or format better
-    
-    // Simple HTML format
-    return `
-      <p>${content.context_warming || ''}</p>
-      <ul>${points}</ul>
-      <p>${content.background_context || ''}</p>
-      <!-- Analysis Data: ${analysis} -->
-    `.trim();
+async function callTranslatorApi(text: string, targetLanguage: 'zh_cn' | 'ms_my'): Promise<TranslatorResponse> {
+  if (TRANSLATOR_COLLECTION_UUID === 'YOUR_TRANSLATOR_COLLECTION_UUID_HERE') {
+    throw new Error('TRANSLATOR_COLLECTION_UUID is not configured. Please update rewriterService.ts');
+  }
+  const languageMap = {
+    zh_cn: 'Chinese (Simplified)',
+    ms_my: 'Malay'
+  };
+  const prompt = `Translate the following English text to ${languageMap[targetLanguage]} and return ONLY the translated text. No markdown, no extra sentences, just the translation.\n\nEnglish Text:\n${text}`;
+
+  const result = await callPerplexityApi(prompt, TRANSLATOR_COLLECTION_UUID);
+  return { translation: result.translation || result.answer || String(result) };
 }
 
+
+
 export async function processRewriteQueue() {
-  // 1. Fetch pending leads
   const leads = await prisma.newsLead.findMany({
     where: { status: 'rewrite_pending' },
-    take: 10, // Process in batches of 10 to avoid long running request
+    take: 10,
     include: { 
       news: {
         include: {
           category: {
-            include: { tags: true }
+            select: { name_en: true }
           }
         }
       }
@@ -159,46 +107,25 @@ export async function processRewriteQueue() {
     if (!lead.news_id || !lead.news) continue;
 
     try {
-      let availableTags: any[] = [];
-      let categoryInfo: {name?: string, description?: string} | undefined = undefined;
-      if (lead.news.category) {
-        if (lead.news.category.tags.length > 0) {
-          availableTags = lead.news.category.tags;
-        }
-        categoryInfo = {
-          name: lead.news.category.name_en, // Use new multilingual name field
-          description: lead.news.category.description_en || undefined
-        };
-      }
+      const categoryInfo = lead.news.category ? {
+          name: lead.news.category.name_en
+      } : undefined;
 
-      const prompt = buildRewritePrompt(
-        lead.headline,
-        availableTags.map((t) => t.name),
-        categoryInfo
-      );
+      const prompt = buildRewritePrompt(lead.headline, categoryInfo);
 
-      // 2. Schedule API call with Rate Limiter
-      const result = await REWRITER_RATE_LIMITER.add(() => callRewriterApi(prompt));
+      const result = await REWRITER_RATE_LIMITER.add(() => callPerplexityApi(prompt, REWRITER_COLLECTION_UUID));
       
-      // Match returned tags with DB tags
-      const connectTags: { id: string }[] = [];
-      if (result.tags && Array.isArray(result.tags)) {
-        result.tags.forEach(tagName => {
-           const found = availableTags.find(t => t.name.toLowerCase() === tagName.toLowerCase());
-           if (found) connectTags.push({ id: found.id });
-        });
-      }
+      const title_en = result.meta?.headline_query ?? lead.news.title_en;
+      const content_en = result.article_en_html ?? lead.news.content_en;
 
-      const title_en = result.titles?.en ?? lead.news.title_en;
-      const title_cn = result.titles?.zh_cn ?? lead.news.title_cn;
-      const title_my = result.titles?.ms_my ?? lead.news.title_my;
+      // Translate title and content
+      const title_cn = (await REWRITER_RATE_LIMITER.add(() => callTranslatorApi(title_en, 'zh_cn')))?.translation ?? title_en;
+      const title_my = (await REWRITER_RATE_LIMITER.add(() => callTranslatorApi(title_en, 'ms_my')))?.translation ?? title_en;
+      const content_cn = (await REWRITER_RATE_LIMITER.add(() => callTranslatorApi(content_en, 'zh_cn')))?.translation ?? content_en;
+      const content_my = (await REWRITER_RATE_LIMITER.add(() => callTranslatorApi(content_en, 'ms_my')))?.translation ?? content_en;
       
-      const content_en = result.article?.en_html ?? formatContent(result.data?.en);
-      const content_cn = result.article?.zh_cn_html ?? formatContent(result.data?.zh_cn);
-      const content_my = result.article?.ms_my_html ?? formatContent(result.data?.ms_my);
       const sourcesArray = Array.isArray(result.source_urls) ? result.source_urls : [];
 
-      // 3. Update Database
       const updatedNews = await prisma.news.update({
         where: { id: lead.news_id },
         data: {
@@ -208,12 +135,10 @@ export async function processRewriteQueue() {
           content_en,
           content_cn,
           content_my,
-          image_url: result.meta?.image_url || null,
-          sources: sourcesArray as any, // Save sources array
-          category_id: lead.news.category_id, // Preserve the existing category
-          tags: {
-            connect: connectTags
-          }
+          image_url: null, // New Rewriter schema doesn't provide image_url
+          sources: sourcesArray as any,
+          category_id: lead.news.category_id,
+          // Removed tags update as the new Rewriter schema doesn't provide tags directly
         }
       });
 
@@ -222,13 +147,13 @@ export async function processRewriteQueue() {
         data: { status: 'rewritten' }
       });
 
-      results.push({ id: lead.id, status: 'success', title: lead.headline, tags: connectTags.length });
+      results.push({ id: lead.id, status: 'success', title: lead.headline });
       
     } catch (error: any) {
       console.error(`Failed to rewrite lead ${lead.id}:`, error);
       await prisma.newsLead.update({
         where: { id: lead.id },
-        data: { status: 'error' } // Mark as error so we don't retry infinitely immediately
+        data: { status: 'error' }
       });
       results.push({ id: lead.id, status: 'error', error: error.message });
     }
@@ -241,7 +166,9 @@ export async function rewriteNews(newsId: string) {
   const news = await prisma.news.findUnique({
     where: { id: newsId },
     include: {
-      category: { include: { tags: true } }
+      category: {
+        select: { name_en: true }
+      }
     }
   });
 
@@ -249,35 +176,26 @@ export async function rewriteNews(newsId: string) {
     throw new Error('News not found');
   }
 
-  const availableTags = news.category?.tags ?? [];
   const categoryInfo = news.category ? {
-    name: news.category.name_en, // Use new multilingual name field
-    description: news.category.description_en || undefined
+    name: news.category.name_en
   } : undefined;
 
   const prompt = buildRewritePrompt(
     news.title_en || news.title_cn || news.title_my,
-    availableTags.map((t) => t.name),
     categoryInfo
   );
 
-  const result = await REWRITER_RATE_LIMITER.add(() => callRewriterApi(prompt));
+  const result = await REWRITER_RATE_LIMITER.add(() => callPerplexityApi(prompt, REWRITER_COLLECTION_UUID));
 
-  const connectTags: { id: string }[] = [];
-  if (result.tags && Array.isArray(result.tags)) {
-    result.tags.forEach((tagName) => {
-      const found = availableTags.find((t) => t.name.toLowerCase() === tagName.toLowerCase());
-      if (found) connectTags.push({ id: found.id });
-    });
-  }
-
-  const title_en = result.titles?.en ?? news.title_en;
-  const title_cn = result.titles?.zh_cn ?? news.title_cn;
-  const title_my = result.titles?.ms_my ?? news.title_my;
+  const title_en = result.meta?.headline_query ?? news.title_en;
+  const content_en = result.article_en_html ?? news.content_en;
   
-  const content_en = result.article?.en_html ?? formatContent(result.data?.en);
-  const content_cn = result.article?.zh_cn_html ?? formatContent(result.data?.zh_cn);
-  const content_my = result.article?.ms_my_html ?? formatContent(result.data?.ms_my);
+  // Translate title and content
+  const title_cn = (await REWRITER_RATE_LIMITER.add(() => callTranslatorApi(title_en, 'zh_cn')))?.translation ?? title_en;
+  const title_my = (await REWRITER_RATE_LIMITER.add(() => callTranslatorApi(title_en, 'ms_my')))?.translation ?? title_en;
+  const content_cn = (await REWRITER_RATE_LIMITER.add(() => callTranslatorApi(content_en, 'zh_cn')))?.translation ?? content_en;
+  const content_my = (await REWRITER_RATE_LIMITER.add(() => callTranslatorApi(content_en, 'ms_my')))?.translation ?? content_en;
+
   const sourcesArray = Array.isArray(result.source_urls) ? result.source_urls : [];
 
   const updatedNews = await prisma.news.update({
@@ -289,10 +207,10 @@ export async function rewriteNews(newsId: string) {
       content_en,
       content_cn,
       content_my,
-      image_url: result.meta?.image_url || null,
+      image_url: null, // New Rewriter schema doesn't provide image_url
       sources: sourcesArray as any,
-      category_id: news.category_id, // Preserve the existing category
-      tags: { connect: connectTags }
+      category_id: news.category_id,
+      // Removed tags update as the new Rewriter schema doesn't provide tags directly
     }
   });
 
