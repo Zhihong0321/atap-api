@@ -85,24 +85,36 @@ async function callTranslatorApi(text: string, targetLanguage: 'zh_cn' | 'ms_my'
 
 
 export async function processRewriteQueue() {
-  const leads = await prisma.newsLead.findMany({
-    where: { status: 'rewrite_pending' },
-    take: 1,
-    include: { 
-      news: {
-        include: {
-          category: {
-            select: { name_en: true }
+  console.log('[Rewriter] Starting queue processing...');
+  let totalProcessed = 0;
+  const results = [];
+
+  while (true) {
+    // Fetch one at a time to manage rate limits and allow breaking
+    const leads = await prisma.newsLead.findMany({
+      where: { status: 'rewrite_pending' },
+      take: 1,
+      include: { 
+        news: {
+          include: {
+            category: {
+              select: { name_en: true }
+            }
           }
         }
       }
+    });
+
+    if (leads.length === 0) {
+      break; // Queue is empty
     }
-  });
 
-  const results = [];
-
-  for (const lead of leads) {
-    if (!lead.news_id || !lead.news) continue;
+    const lead = leads[0];
+    if (!lead.news_id || !lead.news) {
+        // Skip malformed lead (prevent infinite loop)
+        await prisma.newsLead.update({ where: { id: lead.id }, data: { status: 'error' } });
+        continue;
+    }
 
     try {
       const categoryInfo = lead.news.category ? {
@@ -136,7 +148,6 @@ export async function processRewriteQueue() {
           image_url: null, // New Rewriter schema doesn't provide image_url
           sources: sourcesArray as any,
           category_id: lead.news.category_id,
-          // Removed tags update as the new Rewriter schema doesn't provide tags directly
         }
       });
 
@@ -146,6 +157,7 @@ export async function processRewriteQueue() {
       });
 
       results.push({ id: lead.id, status: 'success', title: lead.headline });
+      totalProcessed++;
       
     } catch (error: any) {
       console.error(`Failed to rewrite lead ${lead.id}:`, error);
@@ -157,7 +169,8 @@ export async function processRewriteQueue() {
     }
   }
 
-  return { processed: results.length, details: results };
+  console.log(`[Rewriter] Finished. Processed ${totalProcessed} items.`);
+  return { processed: totalProcessed, details: results };
 }
 
 export async function rewriteNews(newsId: string) {
