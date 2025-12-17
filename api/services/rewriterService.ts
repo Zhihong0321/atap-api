@@ -11,8 +11,9 @@ const REWRITER_RATE_LIMITER = new RateLimiter(4000);
 
 const PERPLEXITY_API_URL = 'https://ee-perplexity-wrapper-production.up.railway.app/api/query_sync';
 const REWRITER_COLLECTION_UUID = '6b8829ad-4c17-4a45-ac67-db3b017c2be6';
-const TRANSLATOR_COLLECTION_UUID = '78b9766b-fbd4-4a4a-9120-4c1396beb6de';
-const ACCOUNT_NAME = 'zhihong0321@gmail';
+const TRANSLATOR_COLLECTION_UUID = 'f3a307b0-d3b8-409a-9c73-39319bfd6b02';
+const ACCOUNT_NAME = 'zhihong0321@gmail'; // Account for Rewriter
+const TRANSLATOR_ACCOUNT_NAME = 'yamal'; // New account for Translator
 
 type RewriterResponse = {
   meta?: {
@@ -41,10 +42,10 @@ ${categorySection}
 `;
 }
 
-async function callPerplexityApi(query: string, collection_uuid: string): Promise<any> {
+async function callPerplexityApi(query: string, collection_uuid: string, account_name_override?: string): Promise<any> {
   const url = new URL(PERPLEXITY_API_URL);
   url.searchParams.append('q', query);
-  url.searchParams.append('account_name', ACCOUNT_NAME);
+  url.searchParams.append('account_name', account_name_override || ACCOUNT_NAME);
   url.searchParams.append('collection_uuid', collection_uuid);
   url.searchParams.append('mode', 'auto');
   url.searchParams.append('sources', 'web');
@@ -77,7 +78,7 @@ async function callTranslatorApi(text: string, targetLanguage: 'zh_cn' | 'ms_my'
   };
   const prompt = `Translate the following English text to ${languageMap[targetLanguage]} and return ONLY the translated text. No markdown, no extra sentences, just the translation.\n\nEnglish Text:\n${text}`;
 
-  const result = await callPerplexityApi(prompt, TRANSLATOR_COLLECTION_UUID);
+  const result = await callPerplexityApi(prompt, TRANSLATOR_COLLECTION_UUID, TRANSLATOR_ACCOUNT_NAME);
   return { translation: result.translation || result.answer || String(result) };
 }
 
